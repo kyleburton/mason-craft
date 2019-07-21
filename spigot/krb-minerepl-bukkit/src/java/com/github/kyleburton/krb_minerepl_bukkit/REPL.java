@@ -49,9 +49,9 @@ public final class REPL extends JavaPlugin {
                     LOG.error("Error: throwable?", ex);
                     throw ex;
                 }
-                cljRequire("clojure.tools.nrepl.server");
+                cljRequire("nrepl.server");
                 cljRequire("cider.nrepl");
-                server = cljEval( "(clojure.tools.nrepl.server/start-server"
+                server = cljEval( "(nrepl.server/start-server"
                                   + "\n  :port " + DEFAULT_REPL_PORT
                                   + "\n  :bind \"" + DEFAULT_REPL_BIND_ADDRESS + "\""
                                   + "\n  :handler cider.nrepl/cider-nrepl-handler)");
