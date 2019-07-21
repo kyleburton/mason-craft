@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+MINECRAFT_VERSION="1.14.4"
+SPIGOT_BUILD_TOOLS_JAR_URL="https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
+
+bake_task install-spigot
+function install-spigot () {
+    test -d ./spigot || mkdir ./spigot
+    (
+        cd ./spigot
+        test -f BuildTools.jar || curl -o BuildTools.jar "$SPIGOT_BUILD_TOOLS_JAR_URL"
+        test -f "spigot-$MINECRAFT_VERSION.jar" || java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"
+    )
+}
+
+
+bake_task run-spigot
+function run-spigot () {
+    set -x
+    (
+        cd ./spigot/krb-minerepl-bukkit
+        lein classpath | tr : "\\n" | grep .m2/repository | tr "\\n" : > ../cp.out
+    )
+    (
+        cd ./spigot
+        export CLASSPATH="$(cat cp.out)"
+        java -Xmx2G -jar "spigot-$MINECRAFT_VERSION.jar"
+    )
+}
+
+
+bake_task build_plugin
+function build_plugin () {
+    (
+        cd ./spigot/krb-minerepl-bukkit
+        # lein javac
+        lein uberjar
+    )
+
+    (
+        cd ./spigot
+        cp krb-minerepl-bukkit/target/krb-minerepl-bukkit-0.1.0-SNAPSHOT-standalone.jar ./plugins/
+    )
+}

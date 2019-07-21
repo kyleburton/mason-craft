@@ -1,0 +1,3 @@
+name: krbminerepl
+main: com.github.kyleburton.krb_minerepl_bukkit.REPL
+version: 0.0.1
