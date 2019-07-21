@@ -33,6 +33,7 @@ public final class REPL extends JavaPlugin {
         synchronized (this) {
             if (server == null) {
                 LOG.info("    ... starting cider nrepl: %s:%s", DEFAULT_REPL_BIND_ADDRESS, DEFAULT_REPL_PORT);
+                LOG.info(String.format("classpath is: '%s'", System.getProperty("java.class.path")));
                 try {
                     Class clazz;
                     clazz = Class.forName("clojure.core$max");
