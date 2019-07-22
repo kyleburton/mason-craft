@@ -4,12 +4,19 @@ SPIGOT_BUILD_TOOLS_JAR_URL="https://hub.spigotmc.org/jenkins/job/BuildTools/last
 
 bake_task install-spigot
 function install-spigot () {
+    set -x
     test -d ./spigot || mkdir ./spigot
     (
         cd ./spigot
         test -f BuildTools.jar || curl -o BuildTools.jar "$SPIGOT_BUILD_TOOLS_JAR_URL"
         test -f "spigot-$MINECRAFT_VERSION.jar" || java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"
+
+
     )
+
+    if [[ ! -e "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar" ]]; then
+      ln -s "$PWD/spigot/spigot-$MINECRAFT_VERSION.jar" "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar"
+    fi
 }
 
 
@@ -39,6 +46,7 @@ function build_plugin () {
 
     (
         cd ./spigot
+	test -d ./plugins || mkdir ./plugins
         cp krb-minerepl-bukkit/target/krb-minerepl-bukkit-0.1.0-SNAPSHOT-standalone.jar ./plugins/
     )
 }

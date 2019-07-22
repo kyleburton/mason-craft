@@ -14,6 +14,7 @@ public final class REPL extends JavaPlugin {
     public static final String DEFAULT_REPL_BIND_ADDRESS = "127.0.0.1";
 
     public static Object server = null;
+    public static REPL plugin = null;
 
     public static void cljRequire(String ns) {
         IFn require = Clojure.var("clojure.core", "require");
@@ -29,6 +30,7 @@ public final class REPL extends JavaPlugin {
     @Override
     public void onEnable() {
         LOG.info("com.github.kyleburton.krb_minerepl_bukkit.REPL: onEnable!");
+        plugin = this;
 
         synchronized (this) {
             if (server == null) {
@@ -55,6 +57,11 @@ public final class REPL extends JavaPlugin {
                                   + "\n  :port " + DEFAULT_REPL_PORT
                                   + "\n  :bind \"" + DEFAULT_REPL_BIND_ADDRESS + "\""
                                   + "\n  :handler cider.nrepl/cider-nrepl-handler)");
+
+                // cljRequire("krb_minerepl_bukkit.core");
+                // IFn setPlugin = Clojure.var("krb-minerepl-bukkit.core", "set-plugin!");
+                // setPlugin.invoke(this);
+
             }
         }
 
