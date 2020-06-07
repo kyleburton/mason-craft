@@ -16,7 +16,7 @@ ops.json
 permissions.yml
 plugins/
 server.properties
-spigot-1.14.4.jar
+spigot-*.*.*.jar
 spigot.yml
 usercache.json
 whitelist.json
@@ -25,3 +25,4 @@ world/
 world_nether/
 world_the_end/
 cp.out
+minerepl.log

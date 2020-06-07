@@ -10,7 +10,7 @@ import clojure.lang.IFn;
 
 public final class REPL extends JavaPlugin {
     public static final Logger LOG                       = LoggerFactory.getLogger(REPL.class.getName());
-    public static final int    DEFAULT_REPL_PORT         = 4123;
+    public static final String DEFAULT_REPL_PORT         = "4123";
     public static final String DEFAULT_REPL_BIND_ADDRESS = "127.0.0.1";
 
     public static Object server = null;
@@ -18,13 +18,21 @@ public final class REPL extends JavaPlugin {
 
     public static void cljRequire(String ns) {
         IFn require = Clojure.var("clojure.core", "require");
-        LOG.info("    ... clojure.core/require %s", ns);
+        LOG.info("    ... clojure.core/require %s".format(ns));
         require.invoke(Clojure.read(ns));
     }
 
     public static Object cljEval(String code) {
         IFn eval = Clojure.var("clojure.core", "eval");
         return eval.invoke(Clojure.read(code));
+    }
+
+    public static String getBindAddress() {
+        return System.getProperty("com.github.kyleburton.krb_minerepl_bukkit.listenAddress", DEFAULT_REPL_BIND_ADDRESS);
+    }
+
+    public static String getBindPort() {
+        return System.getProperty("com.github.kyleburton.krb_minerepl_bukkit.listenPort", DEFAULT_REPL_PORT);
     }
 
     @Override
@@ -34,14 +42,14 @@ public final class REPL extends JavaPlugin {
 
         synchronized (this) {
             if (server == null) {
-                LOG.info("    ... starting cider nrepl: %s:%s", DEFAULT_REPL_BIND_ADDRESS, DEFAULT_REPL_PORT);
-                LOG.info(String.format("classpath is: '%s'", System.getProperty("java.class.path")));
+                LOG.info("    ... starting cider nrepl: %s:%s".format(DEFAULT_REPL_BIND_ADDRESS, DEFAULT_REPL_PORT));
+                LOG.info("classpath is: '%s'".format(System.getProperty("java.class.path")));
                 try {
                     Class clazz;
                     clazz = Class.forName("clojure.core$max");
                     LOG.info("got clojure.core/max", clazz);
                     clazz = Class.forName("clojure.core__init");
-                    LOG.info("got clojure.core__init=%s", clazz);
+                    LOG.info("got clojure.core__init=%s".format(clazz.toString()));
                 }
                 catch (ClassNotFoundException ex) {
                     LOG.error("Error: not found :(", ex);
@@ -53,10 +61,13 @@ public final class REPL extends JavaPlugin {
                 }
                 cljRequire("nrepl.server");
                 cljRequire("cider.nrepl");
-                server = cljEval( "(nrepl.server/start-server"
-                                  + "\n  :port " + DEFAULT_REPL_PORT
-                                  + "\n  :bind \"" + DEFAULT_REPL_BIND_ADDRESS + "\""
-                                  + "\n  :handler cider.nrepl/cider-nrepl-handler)");
+                String expr = "(nrepl.server/start-server"
+                    + "\n  :port " + DEFAULT_REPL_PORT
+                    + "\n  :bind \"" + DEFAULT_REPL_BIND_ADDRESS + "\""
+                    + "\n  :handler cider.nrepl/cider-nrepl-handler)";
+                LOG.info("expression=%s".format(expr));
+                LOG.info("starting server on bind-address=%s:%s".format(DEFAULT_REPL_BIND_ADDRESS, DEFAULT_REPL_PORT));
+                server = cljEval(expr);
 
                 // cljRequire("krb_minerepl_bukkit.core");
                 // IFn setPlugin = Clojure.var("krb-minerepl-bukkit.core", "set-plugin!");

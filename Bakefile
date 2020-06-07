@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-MINECRAFT_VERSION="1.14.4"
+MINECRAFT_VERSION="1.15.2"
 SPIGOT_BUILD_TOOLS_JAR_URL="https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
 
 bake_task install-spigot
@@ -9,18 +9,21 @@ function install-spigot () {
     (
         cd ./spigot
         test -f BuildTools.jar || curl -o BuildTools.jar "$SPIGOT_BUILD_TOOLS_JAR_URL"
-        test -f "spigot-$MINECRAFT_VERSION.jar" || java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"
-
-
+        if [[ ! -f "spigot-$MINECRAFT_VERSION.jar" ]]; then
+            if ! java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"; then
+                curl -o BuildTools.jar "https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
+                java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"
+            fi
+        fi
     )
 
     if [[ ! -e "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar" ]]; then
-      ln -s "$PWD/spigot/spigot-$MINECRAFT_VERSION.jar" "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar"
+        ln -s "$PWD/spigot/spigot-$MINECRAFT_VERSION.jar" "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar"
     fi
 }
 
 
-bake_task run-spigot
+bake_task run-spigot "Run the bukket/spigot server"
 function run-spigot () {
     set -x
     (
@@ -31,7 +34,7 @@ function run-spigot () {
         cd ./spigot
         export CLASSPATH="$(cat cp.out)"
         # java -cp "$CLASSPATH" -Xmx2G -jar "spigot-$MINECRAFT_VERSION.jar"
-        java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx2G  org.bukkit.craftbukkit.Main
+        java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx2G org.bukkit.craftbukkit.Main nogui
     )
 }
 
@@ -46,7 +49,7 @@ function build_plugin () {
 
     (
         cd ./spigot
-	test -d ./plugins || mkdir ./plugins
+	      test -d ./plugins || mkdir ./plugins
         cp krb-minerepl-bukkit/target/krb-minerepl-bukkit-0.1.0-SNAPSHOT-standalone.jar ./plugins/
     )
 }
