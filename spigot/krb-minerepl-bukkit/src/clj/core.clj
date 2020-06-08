@@ -58,25 +58,27 @@
 ;; Y is height
 ;; Z is north (neg) / south (pos)
 (defn location-to-xyzpy [loc]
-  [(.getX loc)
-   (.getY loc)
-   (.getZ loc)
-   (.getPitch loc)
-   (.getYaw loc)])
+  [(.getBlockX loc)
+   (.getBlockY loc)
+   (.getBlockZ loc)
+   (org.bukkit.Location/normalizePitch (.getPitch loc))
+   (org.bukkit.Location/normalizeYaw (.getYaw loc))])
 
 (defn get-player-location [^String name]
   (location-to-xyzpy (.getLocation (get-player-named name))))
 
+;; (.getLocation (get-player-named "kyle_burton"))
+
 (defn get-player-loc-xz [^String name]
   (let [loc (.getLocation (get-player-named name))]
-    [(.getX loc)
-     (.getZ loc)]))
+    [(.getBlockX loc)
+     (.getBlockZ loc)]))
 
 (defn get-player-loc-xyz [^String name]
   (let [loc (.getLocation (get-player-named name))]
-    [(.getX loc)
-     (.getY loc)
-     (.getZ loc)]))
+    [(.getBlockX loc)
+     (.getBlockY loc)
+     (.getBlockZ loc)]))
 
 (comment
 
@@ -243,6 +245,7 @@
 
 (comment
   (set-world-time! :sunset)
+  (set-world-time! :sunrise)
 
   (rewind-world-time-abs!  1000)
   (forward-world-time-abs! 1000)
@@ -254,9 +257,10 @@
      ;; add the entity as a passenger of the chicken
      (let [wheres-kyle (.getLocation (get-player-named "kyle_burton"))
            near-kyle   (loc+ wheres-kyle [(int (rand 10)) 5 (int (rand 10))])
-           chicken     (.spawnEntity (overworld) near-kyle org.bukkit.entity.EntityType/CHICKEN)]
+           ;; chicken     (.spawnEntity (overworld) near-kyle org.bukkit.entity.EntityType/CHICKEN)
+           ]
        (.teleport entity near-kyle)
-       (.addPassenger chicken entity)
+       #_(.addPassenger chicken entity)
        #_(.setFireTicks entity 1000))))
 
   (make-tower-of
@@ -437,6 +441,9 @@
 
   (place-torches! (get-player-loc-xyz "kyle_burton") 10)
 
+  (.setFlying (get-player-named "kyle_burton") true)
+  (.isFlying (get-player-named "kyle_burton"))
+
   (schedule-seq!
    (horiz-coords-around (get-player-loc-xyz "kyle_burton") 10)
    (fn [[xx _ zz]]
@@ -448,12 +455,34 @@
 
   )
 
+(defn replace-with-material-around-player [player-name to-dist if-material to-material]
+  (schedule-seq!
+   (horiz-coords-around (get-player-loc-xyz player-name) to-dist)
+   (fn [[xx _ zz]]
+     (let [yy    (.getHighestBlockYAt (overworld) xx zz)
+           block (.getBlockAt (overworld) xx yy zz)]
+       (when (= if-material (.getType block))
+         (.setType block to-material))))))
+
+(comment
+  (replace-with-material-around-player "kyle_burton" 10 org.bukkit.Material/TNT org.bukkit.Material/AIR)
+
+  )
+
 (defn get-highest-block-y-at [xx zz]
-  (.getHighestBlockYAt (overworld) xx zz))
+  (.getHighestBlockYAt (overworld) (int xx) (int zz)))
+
+(defn round [val]
+  (cond
+    (int? val)
+    val
+
+    :else
+    (Math/round val)))
 
 (defn get-block-at
   ([xx yy zz]
-   (.getBlockAt (overworld) xx yy zz))
+   (.getBlockAt (overworld) (round xx) (round yy) (round zz)))
   ([[xx yy zz]]
    (get-block-at xx yy zz)))
 
@@ -571,30 +600,57 @@
     (place-fn (horiz-coords-around loc-xyz to-dist))))
 
 
+(defn right-triangle-find-a-for-c-and-a-degrees [c-len a-degrees]
+  (* c-len (Math/sin (Math/toRadians a-degrees))))
+
+(comment
+  (Math/round (right-triangle-find-a-for-c-and-a-degrees 5 36.86))
+  (Math/round (right-triangle-find-a-for-c-and-a-degrees 5 53))
+
+  (Math/round (right-triangle-find-a-for-c-and-a-degrees 5 0))
+  )
+
+;; TODO: locations and distances should probably be based on the
+;; middle of the block the player is standing on and to the middle of
+;; the target block to make things "look right"
 (defn loc-in-front-of-player [player-name straightline-dist]
-  (let [player    (get-player-named player-name)
-        loc       (.getLocation player)
-        direction (.getDirection loc)]
-    ;; crude estimation
-    [(long (* (.getX direction) straightline-dist))
-     (long (* (.getY direction) straightline-dist))
-     (long (* (.getZ direction) straightline-dist))]))
+  (let [[xx _ zz _pitch yaw] (get-player-location player-name)
+        ;; xx                   (+ 0.5 (Math/floor xx))
+        ;; zz                   (+ 0.5 (Math/floor zz))
+        yy                   (inc (.getHighestBlockYAt (overworld) (int xx) (int zz)))
+        x-sign               (if (neg? yaw)          1 -1)
+        z-sign               (if (and (>= yaw -90.0) (<= yaw 90.0)) 1 -1)
+        yaw-abs              (Math/abs yaw)
+        yaw-rad              (Math/toRadians yaw-abs)
+        xdelta               (Math/round (* x-sign straightline-dist (Math/abs (Math/sin yaw-rad))))
+        zdelta               (Math/round (* z-sign straightline-dist (Math/abs (Math/cos yaw-rad))))]
+    [(+ xx xdelta)
+     yy
+     (+ zz zdelta)]))
+
+(comment
+  (.getLocation (get-player-named "kyle_burton"))
+
+  (org.bukkit.Location/normalizeYaw (.getYaw (.getLocation (get-player-named "kyle_burton"))))
+
+  (loc-in-front-of-player "kyle_burton" 3)
+
+  )
 
 (defn place-infront-of-player [player-name dist material]
-  (let [loc                                    (loc+ (.getLocation (get-player-named player-name))
-                                                     (loc-in-front-of-player player-name dist))
-        [xx _yy zz _pitch _yaw :as _loc-xyzpy] (location-to-xyzpy loc)
-        yy                                     (inc (.getHighestBlockYAt (overworld) (int xx) (int zz)))]
+  (let [[xx _yy zz] (loc-in-front-of-player player-name dist)
+        yy          (inc (.getHighestBlockYAt (overworld) (int xx) (int zz)))]
     (schedule!
      (log/infof "place-infront-of-player: placing %s at %s" material [xx yy zz])
      (.setType (get-block-at xx yy zz) material))))
 
 (comment
-  (place-infront-of-player "kyle_burton" 5 org.bukkit.Material/TNT)
+  (loc-in-front-of-player "kyle_burton" 3)
+
+  (place-infront-of-player "kyle_burton" 3 org.bukkit.Material/TNT)
 
   (.getLocation (get-player-named "kyle_burton"))
 
-  (loc-in-front-of-player "kyle_burton" 3)
 
   )
 
@@ -631,13 +687,12 @@
 
   )
 
-(defn place-beacon [loc-xyz material]
-  :todo)
-
-
-
 (comment
+
+  org.bukkit.Material
   (flatten-to-bedrock (get-player-loc-xyz "kyle_burton") 6)
+
+  (flatten-to-bedrock-slowly! (get-player-loc-xyz "kyle_burton") 6)
 
   (flatten-to-bedrock-slowly! (get-player-loc-xyz "kyle_burton") 10)
 
@@ -654,4 +709,133 @@
 
   ;; 5244
 
+  )
+
+
+(defn layer-of [loc-xyz xlen zlen material]
+  (let [[xxo yyo zzo] loc-xyz]
+    (doseq [xxd (range xlen) ;; x delta
+            zzd (range zlen)
+            :let [xx (+ xxo xxd)
+                  zz (+ zzo zzd)]]
+      (.setType (get-block-at xx yyo zz) material))))
+
+(defn place-beacon [loc-xyz material]
+  (schedule!
+   (let [[xxo _ zzo] loc-xyz ;; x origin
+         yy          (inc (.getHighestBlockYAt (overworld) (int xxo) (int zzo)))]
+     (layer-of [(+ 0 xxo) (+ 0 yy) (+ 0 zzo)] 11 10 material)
+     (layer-of [(+ 1 xxo) (+ 1 yy) (+ 1 zzo)]  9  8 material)
+     (layer-of [(+ 2 xxo) (+ 2 yy) (+ 2 zzo)]  7  6 material)
+     (layer-of [(+ 3 xxo) (+ 3 yy) (+ 3 zzo)]  5  4 material)
+     (layer-of [(+ 4 xxo) (+ 4 yy) (+ 4 zzo)]  3  2 org.bukkit.Material/BEACON))))
+
+(defn vec+ [v1 v2]
+  (mapv + v1 v2))
+
+(comment
+  (vec+ [1 2 3]
+        [2 2 2])
+
+  (place-beacon
+   (loc-in-front-of-player "kyle_burton" 3)
+   org.bukkit.Material/DIAMOND_BLOCK)
+
+  (dotimes [_ 5]
+    (replace-with-material-around-player "kyle_burton" 13 org.bukkit.Material/DIAMOND_BLOCK org.bukkit.Material/AIR)
+    (replace-with-material-around-player "kyle_burton" 13 org.bukkit.Material/BEACON org.bukkit.Material/AIR))
+
+
+  )
+
+(defn is-air? [material]
+  (contains? #{org.bukkit.Material/AIR
+               org.bukkit.Material/CAVE_AIR
+               org.bukkit.Material/VOID_AIR
+               org.bukkit.Material/LEGACY_AIR}
+             material))
+
+
+(defn flatten-fill [[xxo yyo zzo :as _loc-xyz] material to-dist]
+  (doseq [xx (->> to-dist range (map #(- (+ % xxo) (/ to-dist 2))))
+          zz (->> to-dist range (map #(- (+ % zzo) (/ to-dist 2))))
+          yy (range (get-highest-block-y-at xx zz) yyo)
+          :let [block (get-block-at xx yy zz)]]
+    (if (is-air? (.getType block))
+      (do
+        (log/infof "flatten-fill: setting [%s,%s,%s] to %s" xx yy zz material)
+        (.setType block material))
+      (log/infof "flatten-fill: block at [%s,%s,%s] is not air, it is %s" xx yy zz (.getType block)))))
+
+(comment
+
+  (schedule!
+   (flatten-fill
+    (get-player-loc-xyz "kyle_burton")
+    ;; (-> (get-player-loc-xyz "kyle_burton") (vec+ [0 -1 0]) get-block-at .getType)
+    org.bukkit.Material/GRASS_BLOCK
+    10))
+
+  (get-player-location "kyle_burton")
+
+  (-> (loc-in-front-of-player "kyle_burton" 1) (vec+ [0 0 0]) get-block-at)
+
+  (-> (loc-in-front-of-player "kyle_burton" 1) (vec+ [0 0 0]) get-block-at .getNMS .getStateMap)
+
+
+  net.minecraft.server.v1_15_R1.IBlockState
+  (-> (loc-in-front-of-player "kyle_burton" 1) (vec+ [0 0 0]) get-block-at .getBlockPower)
+  (-> (loc-in-front-of-player "kyle_burton" 1) (vec+ [0 0 0]) get-block-at .getBlockData)
+
+  org.bukkit.block.Beacon
+
+  (cast
+   org.bukkit.block.Beacon
+   (-> ;; (loc-in-front-of-player "kyle_burton" 1)
+    [-288 79 44]
+    ;; (vec+ [0 0 0])
+    get-block-at
+    .getState)
+
+
+   )
+
+  (log/infof "state=%s" (-> ;; (loc-in-front-of-player "kyle_burton" 1)
+                         [-288 79 44]
+                         ;; (vec+ [0 0 0])
+                         get-block-at
+                         .getState))
+
+
+  )
+
+
+(defn get-block-state [loc-xyz]
+  (.getState
+   (get-block-at loc-xyz)))
+
+(defn get-block-state! [loc-xyz]
+  (let [p (promise)]
+    (schedule!
+     (deliver
+      p
+      (get-block-state loc-xyz)))
+    @p))
+
+
+(comment
+
+  (.getPrimaryEffect (get-block-state! [-288 79 44]))
+  (.getSecondaryEffect (get-block-state! [-288 79 44]))
+
+  (schedule!
+   (let [;; effect org.bukkit.potion.PotionEffectType/SPEED
+         effect org.bukkit.potion.PotionEffectType/FAST_DIGGING
+         beacon (get-block-state [-288 79 44])]
+     (.setPrimaryEffect beacon effect)
+     (.setSecondaryEffect beacon effect)
+     (.update beacon)
+     (log/infof "set primary and secondary")))
+
+  org.bukkit.potion.PotionEffectType
   )
