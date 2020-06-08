@@ -34,7 +34,7 @@ function run-spigot () {
         cd ./spigot
         export CLASSPATH="$(cat cp.out)"
         # java -cp "$CLASSPATH" -Xmx2G -jar "spigot-$MINECRAFT_VERSION.jar"
-        java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx2G org.bukkit.craftbukkit.Main nogui
+        java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.Main nogui
     )
 }
 

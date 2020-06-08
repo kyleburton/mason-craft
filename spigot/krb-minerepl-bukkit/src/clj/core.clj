@@ -12,6 +12,10 @@
     (.setContext joran-configurator logger-factory)
     (.doConfigure joran-configurator xml-config-file-path)))
 
+(comment
+  (logback-configure! "/home/kyle/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
+  )
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (def plugin-instance (atom nil))
 
@@ -53,13 +57,15 @@
 ;; X is east (pos) / west (neg)
 ;; Y is height
 ;; Z is north (neg) / south (pos)
+(defn location-to-xyzpy [loc]
+  [(.getX loc)
+   (.getY loc)
+   (.getZ loc)
+   (.getPitch loc)
+   (.getYaw loc)])
+
 (defn get-player-location [^String name]
-  (let [loc (.getLocation (get-player-named name))]
-    [(.getX loc)
-     (.getY loc)
-     (.getZ loc)
-     (.getPitch loc)
-     (.getYaw loc)]))
+  (location-to-xyzpy (.getLocation (get-player-named name))))
 
 (defn get-player-loc-xz [^String name]
   (let [loc (.getLocation (get-player-named name))]
@@ -120,10 +126,14 @@
   (doseq [thing (overworld-live-entities)]
     (.setFireTicks thing 1000)))
 
-(defn schedule-fn! [f delay]
+(defn scheduler []
   (->
    (org.bukkit.Bukkit/getServer)
-   .getScheduler
+   .getScheduler))
+
+(defn schedule-fn! [f delay]
+  (->
+   (scheduler)
    (.scheduleSyncDelayedTask
     (plugin)
     f
@@ -131,8 +141,7 @@
 
 (defmacro schedule! [& body]
   `(->
-    (org.bukkit.Bukkit/getServer)
-    .getScheduler
+    (scheduler)
     (.runTask
      (plugin)
      (fn []
@@ -141,8 +150,31 @@
          (catch Exception e#
            (log/infof e# "Error: e=%s" e#)))))))
 
+(defmacro schedule-later! [delay & body]
+  `(->
+    (scheduler)
+    (.runTaskLater
+     (plugin)
+     (fn []
+       (try
+         (do ~@body)
+         (catch Exception e#
+           (log/infof e# "Error: e=%s" e#))))
+     ~delay)))
+
+(defmacro schedule-sync! [& body]
+  `(->
+    (scheduler)
+    (.scheduleSyncDelayedTask
+     (plugin)
+     (fn []
+       (try
+         (do ~@body)
+         (catch Exception e#
+           (log/infof e# "Error: e=%s" e#)))))))
+
 (defn schedule-seq! [elts func]
-  (let [scheduler (-> (org.bukkit.Bukkit/getServer) .getScheduler)
+  (let [scheduler (scheduler)
         recfunc   (fn rfunc [elts]
                     (when-not (empty? elts)
                       (.scheduleSyncDelayedTask
@@ -153,11 +185,6 @@
                          (rfunc (rest elts)))
                        0)))]
     (recfunc elts)))
-
-(comment
-  (.getScheduler (org.bukkit.Bukkit/getServer))
-
-  )
 
 (defn make-tower-of [base-location type height]
   (schedule!
@@ -216,6 +243,7 @@
 
 (comment
   (set-world-time! :sunset)
+
   (rewind-world-time-abs!  1000)
   (forward-world-time-abs! 1000)
 
@@ -229,7 +257,7 @@
            chicken     (.spawnEntity (overworld) near-kyle org.bukkit.entity.EntityType/CHICKEN)]
        (.teleport entity near-kyle)
        (.addPassenger chicken entity)
-       (.setFireTicks entity 1000))))
+       #_(.setFireTicks entity 1000))))
 
   (make-tower-of
    (loc+ (.getLocation (get-player-named "kyle_burton")) [2 0 2])
@@ -397,18 +425,7 @@
                            (log/infof "place-torches: NOT PLACING TORCH at [%s,%s,%s] light-level=%s" xx yy zz (.getLightLevel block))
                            (placef (rest coords)))))))]
 
-    (place-fn (horiz-coords-around origin to-dist)))
-  #_(schedule-seq!
-     (horiz-coords-around origin to-dist)
-     (fn [[xx _ zz]]
-       (let [yy    (inc (.getHighestBlockYAt (overworld) xx zz))
-             block (.getBlockAt (overworld) xx yy zz)]
-         (if (and (= org.bukkit.Material/AIR (.getType block))
-                  (< (.getLightLevel block) 8))
-           (do
-             (log/infof "place-torches: PLACING torch at [%s,%s,%s] light-level=%s" xx yy zz (.getLightLevel block))
-             (.setType block org.bukkit.Material/TORCH))
-           (log/infof "place-torches: NOT PLACING TORCH at [%s,%s,%s] light-level=%s" xx yy zz (.getLightLevel block)))))))
+    (place-fn (horiz-coords-around origin to-dist))))
 
 
 (comment
@@ -431,9 +448,16 @@
 
   )
 
-(comment
-  (logback-configure! "/home/kyle/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
+(defn get-highest-block-y-at [xx zz]
+  (.getHighestBlockYAt (overworld) xx zz))
 
+(defn get-block-at
+  ([xx yy zz]
+   (.getBlockAt (overworld) xx yy zz))
+  ([[xx yy zz]]
+   (get-block-at xx yy zz)))
+
+(comment
 
 
   ;; getHighestBlockYAt
@@ -452,8 +476,8 @@
 
   ;; nb: need to get the light level of the air block above the target block
   (.getLightLevel (.getBlockAt (overworld) -240 80 106))
-  (.getLightFromBlocks (.getBlockAt (overworld) -240 80 106));; on the air block
-  (.getLightFromBlocks (.getBlockAt (overworld) -240 79 106));; on the stone block
+  (.getLightFromBlocks (.getBlockAt (overworld) -240 80 106)) ;; on the air block
+  (.getLightFromBlocks (.getBlockAt (overworld) -240 79 106)) ;; on the stone block
 
   (.getLightFromSky (.getBlockAt (overworld) -240 80 106))
   (.getLightFromSky (.getBlockAt (overworld) -240 79 106))
@@ -486,7 +510,148 @@
     (schedule!
      (.teleport kyle new-loc)))
 
-  (place-torches )
+  (.getDirection (.getLocation (get-player-named "kyle_burton")))
 
+  )
+
+
+(defn flatten-to-bedrock [loc-xyz to-dist]
+  (schedule!
+   (doseq [[xx _ zz] (horiz-coords-around loc-xyz to-dist)
+           :let [yy (get-highest-block-y-at xx zz)]]
+     (loop [yy yy]
+       (let [block (get-block-at xx yy zz)]
+         (cond
+           (= 0 yy)
+           (do
+             (log/infof "flatten-to-bedrock: halting, hit yy=0")
+             :done)
+
+           (= (.getType block) org.bukkit.Material/AIR)
+           (do
+             (log/infof "flatten-to-bedrock: skipping air block at [%s,%s,%s]" xx yy zz)
+             (recur (dec yy)))
+
+           (= (.getType block) org.bukkit.Material/BEDROCK)
+           (do
+             (log/infof "flatten-to-bedrock: halting, found bedrock block at [%s,%s,%s]" xx yy zz)
+             :done)
+
+           :else
+           (do
+             (log/infof "flatten-to-bedrock: setting block to air at [%s,%s,%s]" xx yy zz)
+             (.setType block org.bukkit.Material/AIR)
+             (recur (dec yy)))))))))
+
+(defn flatten-to-bedrock-slowly! [loc-xyz to-dist]
+  (let [place-fn (fn placef [coords]
+                   (log/infof "placef: (count coords)=%s" (count coords))
+                   (when-not (empty? coords)
+                     (let [[xx _ zz]  (first coords)
+                           highest-yy (inc (.getHighestBlockYAt (overworld) xx zz))]
+                       (doseq [yy (range highest-yy -1 -1)
+                               :let [block (.getBlockAt (overworld) xx yy zz)]]
+                         (schedule-later! (- 100 yy)
+                                          (cond
+                                            (= 0 yy)
+                                            (log/infof "flatten-to-bedrock-slowly!: noop at yy=0")
+
+                                            (= (.getType block) org.bukkit.Material/AIR)
+                                            (log/infof "flatten-to-bedrock-slowly!: skipping air block at [%s,%s,%s]" xx yy zz)
+
+                                            (= (.getType block) org.bukkit.Material/BEDROCK)
+                                            (log/infof "flatten-to-bedrock-slowly!: noop, at bedrock [%s,%s,%s]" xx yy zz)
+
+                                            :else
+                                            (do
+                                              (log/infof "flatten-to-bedrock-slowly!: setting block to air at [%s,%s,%s]" xx yy zz)
+                                              (.setType block org.bukkit.Material/AIR)))))
+                       (placef (rest coords)))))]
+
+    (place-fn (horiz-coords-around loc-xyz to-dist))))
+
+
+(defn loc-in-front-of-player [player-name straightline-dist]
+  (let [player    (get-player-named player-name)
+        loc       (.getLocation player)
+        direction (.getDirection loc)]
+    ;; crude estimation
+    [(long (* (.getX direction) straightline-dist))
+     (long (* (.getY direction) straightline-dist))
+     (long (* (.getZ direction) straightline-dist))]))
+
+(defn place-infront-of-player [player-name dist material]
+  (let [loc                                    (loc+ (.getLocation (get-player-named player-name))
+                                                     (loc-in-front-of-player player-name dist))
+        [xx _yy zz _pitch _yaw :as _loc-xyzpy] (location-to-xyzpy loc)
+        yy                                     (inc (.getHighestBlockYAt (overworld) (int xx) (int zz)))]
+    (schedule!
+     (log/infof "place-infront-of-player: placing %s at %s" material [xx yy zz])
+     (.setType (get-block-at xx yy zz) material))))
+
+(comment
+  (place-infront-of-player "kyle_burton" 5 org.bukkit.Material/TNT)
+
+  (.getLocation (get-player-named "kyle_burton"))
+
+  (loc-in-front-of-player "kyle_burton" 3)
+
+  )
+
+(defn sin-of-degrees [deg]
+  (Math/sin (Math/toRadians deg)))
+
+(defn cos-of-degrees [deg]
+  (Math/cos (Math/toRadians deg)))
+
+(comment
+  ;; 3,4,5 triangle
+  ;; the angle opposite the 3 side:
+  (Math/toDegrees (Math/asin (/ 3.0 5.0)))
+  36.86989764584402
+  ;; the angle opposite the 4 side:
+  (Math/toDegrees (Math/asin (/ 4.0 5.0)))
+  53.13010235415598
+
+  (Math/sin 90)
+  (Math/cos 180)
+
+  (for [deg (range 0 360)
+        :let [rad (Math/toRadians deg)]]
+    [deg rad (Math/sin rad) (Math/cos rad)])
+
+  (/ 4 5.0)
+  0.8
+  (Math/toDegrees 0.8)
+  45.83662361046586
+  (/ 3 5.0)
+  0.6
+  (Math/toDegrees 0.6)
+  34.37746770784939
+
+  )
+
+(defn place-beacon [loc-xyz material]
+  :todo)
+
+
+
+(comment
+  (flatten-to-bedrock (get-player-loc-xyz "kyle_burton") 6)
+
+  (flatten-to-bedrock-slowly! (get-player-loc-xyz "kyle_burton") 10)
+
+  (horiz-coords-around (get-player-loc-xyz "kyle_burton") 1)
+
+  ;; south:         0 /   0
+  ;; west:         90 /  90
+  ;; north:       180 / 180 and -180
+  ;; east:        270 / -90
+  (get-player-location "kyle_burton")
+
+
+  ;; (flatten-to-bedrock (get-player-loc-xyz "kyle_burton") __128)
+
+  ;; 5244
 
   )

@@ -1,7 +1,13 @@
 <configuration scan="true" scanPeriod="30 seconds">
 
-  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-    <file>minerepl.log</file>
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/minerepl.log</file>
+
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>%d{yyyy-MM-dd}-minerepl.log</fileNamePattern>
+      <maxHistory>5</maxHistory>
+      <totalSizeCap>100MB</totalSizeCap>
+    </rollingPolicy>
 
     <encoder>
       <pattern>%date %level [%thread] %logger{10} [%file:%line] %msg%n</pattern>
