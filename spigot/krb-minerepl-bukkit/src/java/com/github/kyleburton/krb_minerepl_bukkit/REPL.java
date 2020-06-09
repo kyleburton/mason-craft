@@ -69,9 +69,25 @@ public final class REPL extends JavaPlugin {
                 LOG.info("starting server on bind-address=%s:%s".format(DEFAULT_REPL_BIND_ADDRESS, DEFAULT_REPL_PORT));
                 server = cljEval(expr);
 
-                // cljRequire("krb_minerepl_bukkit.core");
-                // IFn setPlugin = Clojure.var("krb-minerepl-bukkit.core", "set-plugin!");
+                // NB: the clj code is not on the classpath
+                /*
+                cljRequire("krb-minerepl-bukkit.core");
+                IFn setPlugin = Clojure.var("krb-minerepl-bukkit.core", "set-plugin!");
+                setPlugin.invoke(this);
+                */
+
+                // NB: you can get the plugin from the clojure side, see the clj code :)
+                // cljEval("(ns krb-minerepl-bukkit.plugin) (defonce server (atom nil)) (defn init! [s] (reset! server s))");
+                // LOG.warn("*ns* is=%s".format((String)cljEval("(str *ns*)")));
+                // Object res1 = cljEval("(defonce krb-plugin-instance (atom nil))");
+                // LOG.warn("  defonce res=%s".format(res1.toString()));
+                // Object res2 = cljEval("(defn krb-set-plugin! [s] (reset! krb-plugin-instance s))");
+                // LOG.warn("  defn res2=%s".format(res2.toString()));
+                // IFn setPlugin = Clojure.var("clojure.core", "krb-set-plugin!");
                 // setPlugin.invoke(this);
+                // IFn setPlugin = Clojure.var("user", "set-plugin!");
+                // setPlugin.invoke(this);
+
 
             }
         }

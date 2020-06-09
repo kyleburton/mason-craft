@@ -2,6 +2,10 @@
   (:require
    [clojure.tools.logging :as log]))
 
+;; (.getSeed (overworld))
+;; -8944630491960636560
+
+
 ;; M-x cider-connect 4123
 ;; https://hub.spigotmc.org/javadocs/bukkit/index.html?org/bukkit/entity/package-summary.html
 
@@ -36,7 +40,17 @@
   @plugin-instance)
 
 (comment
-  (plugin)
+  org.bukkit.plugin.Plugin
+  (.getServer (plugin))
+
+  (.getPluginManager (org.bukkit.Bukkit/getServer))
+
+  ;; registerEvent​(@NotNull Class<? extends Event> event, @NotNull Listener listener, @NotNull EventPriority priority, @NotNull EventExecutor executor, @NotNull Plugin plugin)
+  (org.bukkit.event.player.PlayerInteractEvent.)
+  (.registerEvent
+   (.getPluginManager (org.bukkit.Bukkit/getServer))
+   )
+
 
   )
 
@@ -63,6 +77,15 @@
    (.getBlockZ loc)
    (org.bukkit.Location/normalizePitch (.getPitch loc))
    (org.bukkit.Location/normalizeYaw (.getYaw loc))])
+
+(defn location-to-xyz [loc]
+  [(.getBlockX loc)
+   (.getBlockY loc)
+   (.getBlockZ loc)])
+
+(defn location-to-xz [loc]
+  [(.getBlockX loc)
+   (.getBlockZ loc)])
 
 (defn get-player-location [^String name]
   (location-to-xyzpy (.getLocation (get-player-named name))))
@@ -110,6 +133,15 @@
     (reset! overworld-instance
             (-> (org.bukkit.Bukkit/getWorlds) first)))
   @overworld-instance)
+
+(comment
+
+;; (import 'com.github.kyleburton.krb_minerepl_bukkit.REPL)
+;; com.github.kyleburton.krb_minerepl_bukkit.REPL
+;; com.github.kyleburton.krb_minerepl_bukkit.REPL/server
+  (java.lang.Class/forName  "com.github.kyleburton.krb_minerepl_bukkit.REPL")
+)
+
 
 (defn overworld-live-entities []
   (->>
@@ -244,8 +276,9 @@
 
 
 (comment
-  (set-world-time! :sunset)
   (set-world-time! :sunrise)
+  (set-world-time! :morning)
+  (set-world-time! :sunset)
 
   (rewind-world-time-abs!  1000)
   (forward-world-time-abs! 1000)
@@ -776,6 +809,14 @@
     org.bukkit.Material/GRASS_BLOCK
     10))
 
+  (schedule!
+   (flatten-fill
+    (get-player-loc-xyz "kyle_burton")
+    org.bukkit.Material/STRUCTURE_BLOCK
+    10))
+
+  org.bukkit.Material
+
   (get-player-location "kyle_burton")
 
   (-> (loc-in-front-of-player "kyle_burton" 1) (vec+ [0 0 0]) get-block-at)
@@ -838,4 +879,69 @@
      (log/infof "set primary and secondary")))
 
   org.bukkit.potion.PotionEffectType
+
+  (get-player-loc-xyz "kyle_burton")
+  [-289 77 41]
+
+  (do
+    (set-world-time! :morning)
+    (def chicken
+     (->
+      (let [world (overworld)
+            loc   (-> world (.getHighestBlockAt 0 0) .getLocation)]
+        [world
+         loc
+         (.locateNearestStructure
+          (overworld)
+          loc                             ;; Location (origin)
+          ;; org.bukkit.StructureType/VILLAGE ;; StructureType
+          ;; org.bukkit.StructureType/STRONGHOLD
+          org.bukkit.StructureType/OCEAN_MONUMENT
+          500                              ;; int radius
+          true                             ;; bool findUnexplored
+          )])
+      (nth 2)
+      location-to-xz))
+    chicken)
+
+
+  ;; chicken
+
+
+  (schedule!
+   (let [player (get-player-named "kyle_burton")
+         world  (.getWorld player)
+         ;; [xx zz] [32 736]       ;; village: snow
+         ;; [xx zz] [768 592]      ;; village: snow
+         ;; [xx zz] [-912 1040]    ;; village: desert
+         ;; [xx zz] [112 1216]     ;; village: snow
+         ;; [xx zz] [512 1136]     ;; village: snow
+         ;; [xx zz] [1024 576]     ;; village: snow
+         ;; [xx zz] [1024 576]     ;; village: snow
+         ;; [xx zz] [1392 1280]    ;; village: snow
+         [xx zz] [-1328 -1424]  ;; village: plans/desert
+         ;; [xx zz] [-1360 1200]   ;; village: desert
+         ;; [xx zz] [-976 -1504]   ;; village: savanah
+         ;; [xx zz] [-992 1824]    ;; village: savanah
+         ;; [xx zz] [-1808 800]    ;; village: savanah
+         ;; [xx zz] [-1968 1040]   ;; village: plains
+         ;; [xx zz] [-1792 1904]   ;; village: desert w/temple
+         ;; [xx zz] [-928 -1728]   ;; village: desert
+         ;; [xx zz] [2416 -1904]   ;; village: plains
+         ;; [xx zz] [-1688 -1256]  ;; stronghold
+         ;; [xx zz] [-752 256]     ;; ocean monument (big)
+         ;; [xx zz] [-752 2144]    ;; ocean monument
+         yy     (inc (.getHighestBlockYAt world xx zz))
+         dest   (org.bukkit.Location.
+                 world
+                 xx
+                 yy
+                 zz)]
+     (.teleport player dest)))
+
+  (schedule!
+   (.teleport (get-player-named "kyle_burton") (org.bukkit.Location. (overworld) -289 77 41)))
+
+
+  ;; TODO: generate more structures
   )
