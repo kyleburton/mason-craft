@@ -15,4 +15,7 @@
                  [org.clojure/tools.logging        "0.4.1"]
                  [org.clojure/tools.nrepl          "0.2.13"]
                  [cider/cider-nrepl                "0.21.1"]
-                 [ch.qos.logback/logback-classic   "1.2.3"]])
+                 [ch.qos.logback/logback-classic   "1.2.3"]
+                 ;; [org.spigotmc/spigot-api          "1.9"]
+                 [org.spigotmc/spigot-api          "1.19.3-R0.1-SNAPSHOT"]
+                 ])

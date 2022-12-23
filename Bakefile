@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-MINECRAFT_VERSION="1.15.2"
+MINECRAFT_VERSION="1.19.3"
+# MINECRAFT_VERSION="1.19.2"
+# MINECRAFT_VERSION="1.19.1"
 SPIGOT_BUILD_TOOLS_JAR_URL="https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
 
 bake_task install-spigot
@@ -15,6 +17,12 @@ function install-spigot () {
                 java -Xmx2G -jar BuildTools.jar --rev "$MINECRAFT_VERSION"
             fi
         fi
+
+        # https://download.getbukkit.org/craftbukkit/craftbukkit-1.19.2.jar
+        # krb-minerepl-bukkit/lib/craftbukkit-1.19.2.jar
+        if [[ ! -f "krb-minerepl-bukkit/lib/craftbukkit-$MINECRAFT_VERSION.jar" ]]; then
+                curl -o "krb-minerepl-bukkit/lib/craftbukkit-$MINECRAFT_VERSION.jar" "https://download.getbukkit.org/craftbukkit/craftbukkit-$MINECRAFT_VERSION.jar"
+        fi
     )
 
     if [[ ! -e "$PWD/spigot/krb-minerepl-bukkit/lib/spigot-$MINECRAFT_VERSION.jar" ]]; then
@@ -28,13 +36,15 @@ function run-spigot () {
     set -x
     (
         cd ./spigot/krb-minerepl-bukkit
-        lein classpath | tr : "\\n" | grep .m2/repository | tr "\\n" : > ../cp.out
+        lein classpath | tr : "\\n" | grep .m2/repository | tr "\\n" : | sed 's/:$//' > ../cp.out
     )
     (
         cd ./spigot
         export CLASSPATH="$(cat cp.out)"
         # java -cp "$CLASSPATH" -Xmx2G -jar "spigot-$MINECRAFT_VERSION.jar"
-        java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.Main nogui
+        # java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.Main nogui
+        # java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G # org.bukkit.craftbukkit.Main nogui
+        java -cp "$CLASSPATH:./krb-minerepl-bukkit/lib/craftbukkit-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.bootstrap.Main nogui
     )
 }
 
