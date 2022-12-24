@@ -79,6 +79,40 @@
 (defn get-player-named [name]
   (org.bukkit.Bukkit/getPlayer name))
 
+(defn ->player [name-or-player]
+  (cond
+    (isa? (class name-or-player) org.bukkit.entity.Player)
+    name-or-player
+
+    (isa? (class name-or-player) String)
+    (get-player-named name-or-player)
+
+    :else
+    (throw (RuntimeException. (format "->player: unrecognized name-or-player=%s/%s" (class name-or-player) name-or-player)))))
+
+(defn ->loc [player-or-loc]
+  (cond
+    (isa? (class player-or-loc) org.bukkit.entity.Player)
+    (.getLocation player-or-loc)
+
+    (isa? (class player-or-loc) String)
+    (-> player-or-loc ->player .getLocation)
+
+    (isa? (class player-or-loc) org.bukkit.Location)
+    player-or-loc
+
+    (vector? player-or-loc)
+    (let [[xx yy zz] player-or-loc]
+     (org.bukkit.Location.
+      (overworld) ;; nb: this is an assumption
+      xx
+      yy
+      zz))
+
+    :else
+    (throw (RuntimeException. (format "->loc: unrecognized player-or-loc=%s/%s" (class player-or-loc) player-or-loc)))))
+
+
 ;; X is east (pos) / west (neg)
 ;; Y is height
 ;; Z is north (neg) / south (pos)
@@ -200,9 +234,9 @@
   ([loc block-face scale]
    (let [[x y z] (direction-unit-offsets block-face)
          offset  [(* x scale)
-                     (* y scale)
-                     (* z scale)]]
-    (loc+ loc offset))))
+                  (* y scale)
+                  (* z scale)]]
+     (loc+ loc offset))))
 
 
 (def overworld-instance (atom nil))
@@ -941,8 +975,95 @@
       (get-block-state loc-xyz)))
     @p))
 
+(defn all-coords-around-location [loc dist]
+  (let [[xx yy zz] (-> loc ->loc location-to-xyz)
+        dmin       (* -1 dist)]
+    (for [x1 (range dmin (inc dist))
+          y1 (range dmin (inc dist))
+          z1 (range dmin (inc dist))]
+      [(+ xx x1)
+       (+ yy y1)
+       (+ zz z1)])))
+
+(defn shell-coords-around-location [loc dist]
+  ;; surface of a cube, top is dist^2, bottom is dist^2
+  (let [[xx yy zz] (-> loc ->loc location-to-xyz)
+        x-min      (- xx dist)
+        x-max      (+ xx dist)
+        y-min      (- yy dist)
+        y-max      (+ yy dist)
+        z-min      (- zz dist)
+        z-max      (+ zz dist)]
+    (vec
+     (concat
+      ;; top - y
+      (for [xx (range x-min (inc x-max))
+            zz (range z-min (inc z-max))]
+        [xx y-max zz])
+      ;; bottom - y
+      (for [xx (range x-min (inc x-max))
+            zz (range z-min (inc z-max))]
+        [xx y-min zz])
+      ;; front - x
+      (for [yy (range y-min (inc y-max))
+            zz (range (inc z-min) z-max)]
+        [x-min yy zz])
+      ;; back  - x
+      (for [yy (range y-min (inc y-max))
+            zz (range (inc z-min) z-max)]
+        [x-max yy zz])
+      ;; left  - z
+      (for [xx (range (inc x-min) x-max)
+            yy (range (inc y-min) y-max)]
+        [xx yy z-max])
+      ;; right - z
+      (for [xx (range (inc x-min) x-max)
+            yy (range (inc y-min) y-max)]
+        [xx yy z-min])))))
 
 (comment
+
+  (count (shell-coords-around-location "DominusSermonis" 2))
+
+  )
+
+
+;; NB: it's not possible to name a placed block!
+#_(defn find-named-block-near-player [player block-name]
+  ;; starting at where the player is standing, search outward
+  (loop [dist     1
+         max-dist 3 #_8]
+    (let [coords (shell-coords-around-location player dist)
+          item   (->> coords
+                      (filter (fn [coord]
+                                (let [block (get-block-at coord)]
+                                  (if (= org.bukkit.Material/STONE (.getType block))
+                                    (def block block))
+                                  (log/infof "block=%s" block)
+                                  nil)))
+                      first)]
+      (cond
+        item
+        item
+
+        (zero? max-dist)
+        nil
+
+        :else
+        (recur (inc dist) (dec max-dist))))))
+
+(comment
+
+  ;; (find-named-block-near-player "DominusSermonis" "marker")
+
+  block
+  (.getState block)
+  (.getNMS block)
+  ;; (.getMetadata block <String>) ;;
+  (.getDrops block)
+  (.getBlockData block) ;;
+
+  (.getState (.getBlockData block))
 
   (.getPrimaryEffect (get-block-state! [-288 79 44]))
   (.getSecondaryEffect (get-block-state! [-288 79 44]))
@@ -1023,3 +1144,9 @@
 
   ;; TODO: generate more structures
   )
+
+
+(defn loc->loc-and-type [loc]
+  (let [loc   (->loc loc)
+        block (.getBlock loc)]
+    [loc (.getType block)]))

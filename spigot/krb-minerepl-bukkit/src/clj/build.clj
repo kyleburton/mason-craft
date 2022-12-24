@@ -116,3 +116,19 @@
    (.getWorld (core/get-player-named "DominusSermonis"))
    (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999)))
   )
+
+
+(comment
+
+  (def blocks (mapv core/loc->loc-and-type (core/shell-coords-around-location "DominusSermonis" 3)))
+
+  (core/schedule!
+   (set-blocks
+    (mapv
+     (fn [[loc _type]]
+       [loc org.bukkit.Material/GLASS])
+     blocks)))
+
+  (core/schedule! (set-blocks blocks))
+
+)
