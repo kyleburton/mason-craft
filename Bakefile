@@ -44,7 +44,7 @@ function run-spigot () {
         # java -cp "$CLASSPATH" -Xmx2G -jar "spigot-$MINECRAFT_VERSION.jar"
         # java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.Main nogui
         # java -cp "$CLASSPATH:spigot-$MINECRAFT_VERSION.jar" -Xmx4G # org.bukkit.craftbukkit.Main nogui
-        java -cp "$CLASSPATH:./krb-minerepl-bukkit/lib/craftbukkit-$MINECRAFT_VERSION.jar" -Xmx4G org.bukkit.craftbukkit.bootstrap.Main nogui
+        java -cp "$CLASSPATH:./krb-minerepl-bukkit/lib/craftbukkit-$MINECRAFT_VERSION.jar" -Xmx8G org.bukkit.craftbukkit.bootstrap.Main nogui
     )
 }
 

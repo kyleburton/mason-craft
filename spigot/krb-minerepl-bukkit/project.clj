@@ -11,11 +11,12 @@
              "Class-Path" "./"
              }
   :dependencies [
-                 [org.clojure/clojure              "1.10.0"]
-                 [org.clojure/tools.logging        "0.4.1"]
-                 [org.clojure/tools.nrepl          "0.2.13"]
-                 [cider/cider-nrepl                "0.21.1"]
-                 [ch.qos.logback/logback-classic   "1.2.3"]
+                 [org.clojure/clojure              "1.11.1"]
+                 [org.clojure/tools.logging        "1.2.4"]
+                 [nrepl/nrepl                      "0.9.0"]
+                 [cider/cider-nrepl                "0.28.5"]
+                 [ch.qos.logback/logback-classic   "1.2.11"]
+
                  ;; [org.spigotmc/spigot-api          "1.9"]
                  [org.spigotmc/spigot-api          "1.19.3-R0.1-SNAPSHOT"]
                  ])

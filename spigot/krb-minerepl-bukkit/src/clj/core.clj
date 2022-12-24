@@ -2,8 +2,16 @@
   (:require
    [clojure.tools.logging :as log]))
 
-;; (.getSeed (overworld))
-;; -8944630491960636560
+(comment
+
+  (.getSeed (overworld))
+  ;; -8944630491960636560
+
+  (.getWorldType (overworld))
+  (.getDifficulty (overworld))
+  (.getPlayers (overworld))
+
+  )
 
 
 ;; M-x cider-connect 4123
@@ -18,6 +26,7 @@
 
 (comment
   (logback-configure! "/home/kyle/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
+  (logback-configure! "/Users/kburton/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -42,6 +51,8 @@
 (comment
   org.bukkit.plugin.Plugin
   (.getServer (plugin))
+
+  (.getDefaultGameMode (.getServer (plugin)))
 
   (.getPluginManager (org.bukkit.Bukkit/getServer))
 
@@ -117,14 +128,42 @@
     (doseq [message messages]
       (.sendMessage player message))))
 
-(defn loc+ [loc [x y z yaw pitch]]
+(defn inc-loc-dir [loc ^String dir]
+  ;; org.bukkit.Location
+  (let [new-loc (org.bukkit.Location.
+                 (.getWorld loc)
+                 (.getX loc)
+                 (.getY loc)
+                 (.getZ loc))]
+    (cond
+      (= dir "SOUTH")
+      ;; :+1z
+      (.setZ loc (inc (.getZ loc)))
+
+      (= dir "WEST")
+      ;; :-1x
+      (.setX loc (dec (.getX loc)))
+      (= dir "NORTH")
+      ;; :-1z
+      (.setZ loc (dec (.getZ loc)))
+      (= dir "EAST")
+      ;; :+1x
+      (.setX loc (inc (.getX loc)))
+
+      :else
+      (throw (RuntimeException. (format "Error: invalid direction=%s" dir))))
+    new-loc))
+
+(defn loc+ [loc [x y z]]
   ;; (if yaw (.setYaw loc yaw))
   ;; (if pitch (.setPitch loc pitch))
   (let [newloc (org.bukkit.Location.
                 (.getWorld loc)
                 (+ x (.getX loc))
                 (+ y (.getY loc))
-                (+ z (.getZ loc)))]
+                (+ z (.getZ loc))
+                (.getYaw loc)
+                (.getPitch loc))]
     newloc))
 
 (def overworld-instance (atom nil))
@@ -136,11 +175,11 @@
 
 (comment
 
-;; (import 'com.github.kyleburton.krb_minerepl_bukkit.REPL)
-;; com.github.kyleburton.krb_minerepl_bukkit.REPL
-;; com.github.kyleburton.krb_minerepl_bukkit.REPL/server
+  ;; (import 'com.github.kyleburton.krb_minerepl_bukkit.REPL)
+  ;; com.github.kyleburton.krb_minerepl_bukkit.REPL
+  ;; com.github.kyleburton.krb_minerepl_bukkit.REPL/server
   (java.lang.Class/forName  "com.github.kyleburton.krb_minerepl_bukkit.REPL")
-)
+  )
 
 
 (defn overworld-live-entities []
@@ -886,22 +925,22 @@
   (do
     (set-world-time! :morning)
     (def chicken
-     (->
-      (let [world (overworld)
-            loc   (-> world (.getHighestBlockAt 0 0) .getLocation)]
-        [world
-         loc
-         (.locateNearestStructure
-          (overworld)
-          loc                             ;; Location (origin)
-          ;; org.bukkit.StructureType/VILLAGE ;; StructureType
-          ;; org.bukkit.StructureType/STRONGHOLD
-          org.bukkit.StructureType/OCEAN_MONUMENT
-          500                              ;; int radius
-          true                             ;; bool findUnexplored
-          )])
-      (nth 2)
-      location-to-xz))
+      (->
+       (let [world (overworld)
+             loc   (-> world (.getHighestBlockAt 0 0) .getLocation)]
+         [world
+          loc
+          (.locateNearestStructure
+           (overworld)
+           loc                             ;; Location (origin)
+           ;; org.bukkit.StructureType/VILLAGE ;; StructureType
+           ;; org.bukkit.StructureType/STRONGHOLD
+           org.bukkit.StructureType/OCEAN_MONUMENT
+           500                              ;; int radius
+           true                             ;; bool findUnexplored
+           )])
+       (nth 2)
+       location-to-xz))
     chicken)
 
 
