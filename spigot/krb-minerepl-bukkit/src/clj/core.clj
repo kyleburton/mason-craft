@@ -166,6 +166,45 @@
                 (.getPitch loc))]
     newloc))
 
+(def direction-unit-offsets
+  (let [offsets {org.bukkit.block.BlockFace/NORTH            [ 0  0 -1]
+                 org.bukkit.block.BlockFace/EAST             [ 1  0  0]
+                 org.bukkit.block.BlockFace/SOUTH            [ 0  0  1]
+                 org.bukkit.block.BlockFace/WEST             [-1  0  0]
+                 org.bukkit.block.BlockFace/UP               [ 0  1  0]
+                 org.bukkit.block.BlockFace/DOWN             [ 0 -1  0]
+                 org.bukkit.block.BlockFace/NORTH_EAST       [ 1  0 -1]
+                 org.bukkit.block.BlockFace/NORTH_WEST       [-1  0 -1]
+                 org.bukkit.block.BlockFace/SOUTH_EAST       [ 1  0  1]
+                 org.bukkit.block.BlockFace/SOUTH_WEST       [-1  0  1]
+                 org.bukkit.block.BlockFace/WEST_NORTH_WEST  [-1  0 -1]
+                 org.bukkit.block.BlockFace/NORTH_NORTH_WEST [-1  0 -1]
+                 org.bukkit.block.BlockFace/NORTH_NORTH_EAST [ 1  0 -1]
+                 org.bukkit.block.BlockFace/EAST_NORTH_EAST  [ 1  0 -1]
+                 org.bukkit.block.BlockFace/EAST_SOUTH_EAST  [ 1  0  1]
+                 org.bukkit.block.BlockFace/SOUTH_SOUTH_EAST [ 1  0  1]
+                 org.bukkit.block.BlockFace/SOUTH_SOUTH_WEST [-1  0  1]
+                 org.bukkit.block.BlockFace/WEST_SOUTH_WEST  [-1  0  1]}]
+    (assoc
+     offsets
+     :up    (get offsets org.bukkit.block.BlockFace/UP)
+     :down  (get offsets org.bukkit.block.BlockFace/DOWN)
+     :north (get offsets org.bukkit.block.BlockFace/NORTH)
+     :east  (get offsets org.bukkit.block.BlockFace/EAST)
+     :south (get offsets org.bukkit.block.BlockFace/SOUTH)
+     :west  (get offsets org.bukkit.block.BlockFace/WEST))))
+
+(defn loc+direction
+  ([loc block-face]
+   (loc+ loc (direction-unit-offsets block-face)))
+  ([loc block-face scale]
+   (let [[x y z] (direction-unit-offsets block-face)
+         offset  [(* x scale)
+                     (* y scale)
+                     (* z scale)]]
+    (loc+ loc offset))))
+
+
 (def overworld-instance (atom nil))
 (defn overworld []
   (when (nil? @overworld-instance)

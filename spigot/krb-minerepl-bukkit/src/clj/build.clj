@@ -7,15 +7,15 @@
   (let [world (.getWorld location)]
     (mapv
      (fn [ii]
-       (let [block (.getBlockAt world (core/inc-loc-dir location direction))]
-         [(.getLocation block) (.getType block)]))
+       (let [loc (core/loc+direction location direction ii)]
+         [loc (.. loc getBlock getType)]))
      (range length))))
 
 (comment
   (get-blocks
    (core/loc+ (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") Integer/MAX_VALUE))
               [0 1 0])
-   (.name (.getFacing (core/get-player-named "DominusSermonis")))
+   (.getFacing (core/get-player-named "DominusSermonis"))
    10)
 
   )
@@ -24,7 +24,7 @@
   (doall
    (reduce
     (fn [acc [loc type]]
-      (let [block     (.getBlockAt (.getWorld loc) loc)
+      (let [block     (.getBlock loc)
             orig-type (.getType block)]
         (.setType block type)
         (conj acc [loc orig-type])))
@@ -37,7 +37,7 @@
     (get-blocks
      (core/loc+ (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") Integer/MAX_VALUE))
                 [0 1 0])
-     (.name (.getFacing (core/get-player-named "DominusSermonis")))
+     (.getFacing (core/get-player-named "DominusSermonis"))
      10))
 
   (core/schedule!
@@ -51,14 +51,23 @@
 
   )
 
-(defn build-road [loc direction length step pave-fn]
-  )
+(defn build-road [loc direction num-segments step pave-fn]
+  (loop [loc          loc
+         num-segments num-segments
+         acc          []]
+    (if (zero? num-segments)
+      acc
+      (do
+        (pave-fn acc loc direction num-segments step)
+        (recur
+         (core/loc+direction loc direction)
+         (dec num-segments)
+         (conj acc [loc (.getType (.getBlock loc))]))))))
 
 (comment
   (core/all-players)
   (core/get-player-named "DominusSermonis")
   (.getCompassTarget (core/get-player-named "DominusSermonis"))
-  ;; #object[org.bukkit.Location 0x25b0a681 "Location{world=CraftWorld{name=world},x=-256.0,y=72.0,z=-80.0,pitch=0.0,yaw=0.0}"]
   (.getSpectatorTarget (core/get-player-named "DominusSermonis"))
 
   (def player (core/get-player-named "DominusSermonis"))
