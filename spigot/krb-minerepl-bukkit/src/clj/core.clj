@@ -1,6 +1,7 @@
 (ns krb-minerepl-bukkit.core
   (:require
-   [clojure.tools.logging :as log]))
+   [clojure.tools.logging  :as log]
+   [camel-snake-kebab.core :as csk]))
 
 (comment
 
@@ -65,6 +66,14 @@
 
   )
 
+(def overworld-instance (atom nil))
+(defn overworld []
+  (when (nil? @overworld-instance)
+    (reset! overworld-instance
+            (-> (org.bukkit.Bukkit/getWorlds) first)))
+  @overworld-instance)
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro after [stime & body]
   `(.run
@@ -103,11 +112,11 @@
 
     (vector? player-or-loc)
     (let [[xx yy zz] player-or-loc]
-     (org.bukkit.Location.
-      (overworld) ;; nb: this is an assumption
-      xx
-      yy
-      zz))
+      (org.bukkit.Location.
+       (overworld) ;; nb: this is an assumption
+       xx
+       yy
+       zz))
 
     :else
     (throw (RuntimeException. (format "->loc: unrecognized player-or-loc=%s/%s" (class player-or-loc) player-or-loc)))))
@@ -188,17 +197,114 @@
       (throw (RuntimeException. (format "Error: invalid direction=%s" dir))))
     new-loc))
 
-(defn loc+ [loc [x y z]]
-  ;; (if yaw (.setYaw loc yaw))
-  ;; (if pitch (.setPitch loc pitch))
-  (let [newloc (org.bukkit.Location.
-                (.getWorld loc)
-                (+ x (.getX loc))
-                (+ y (.getY loc))
-                (+ z (.getZ loc))
-                (.getYaw loc)
-                (.getPitch loc))]
-    newloc))
+(defn loc->coords [loc]
+  (cond
+    (vector? loc)
+    loc
+
+    (isa? (class loc) org.bukkit.Location)
+    [(.getX loc) (.getY loc) (.getZ loc)]
+
+    :else
+    (throw (RuntimeException. (format "loc->coords unsure how to get [x,y,z] from loc=%s" loc)))))
+
+(defn loc+ [& locations]
+  (let [[xx yy zz] (->>
+                    locations
+                    (map loc->coords)
+                    (reduce
+                     (fn [[x1 y1 z1] [x2 y2 z2]]
+                       [(+ x1 x2)
+                        (+ y1 y2)
+                        (+ z1 z2)])))]
+    (org.bukkit.Location.
+     ;; TODO: how can we factor out overworld/nether/end? ... and keep things convienient
+     (overworld)
+     xx
+     yy
+     zz
+     0 ;; yaw
+     0 ;; pitch
+     )))
+
+(defn loc- [& locations]
+  (let [[xx yy zz] (->>
+                    locations
+                    (map loc->coords)
+                    (reduce
+                     (fn [[x1 y1 z1] [x2 y2 z2]]
+                       [(- x1 x2)
+                        (- y1 y2)
+                        (- z1 z2)])))]
+    (org.bukkit.Location.
+     (overworld)
+     xx
+     yy
+     zz
+     0 ;; yaw
+     0 ;; pitch
+     )))
+
+(defn loc* [loc scale]
+  (let [loc        (->loc loc)
+        xx (.getX loc)
+        yy (.getY loc)
+        zz (.getZ loc)]
+    [(* xx scale)
+     (* yy scale)
+     (* zz scale)]))
+
+(def cardinal-directions
+  {:north                                      :north
+   :east                                       :east
+   :south                                      :south
+   :west                                       :west
+   :up                                         :up
+   :down                                       :down
+   org.bukkit.block.BlockFace/NORTH            :north
+   org.bukkit.block.BlockFace/EAST             :east
+   org.bukkit.block.BlockFace/SOUTH            :south
+   org.bukkit.block.BlockFace/WEST             :west
+   org.bukkit.block.BlockFace/UP               :up
+   org.bukkit.block.BlockFace/DOWN             :down
+   org.bukkit.block.BlockFace/NORTH_EAST       :north
+   org.bukkit.block.BlockFace/NORTH_WEST       :north
+   org.bukkit.block.BlockFace/SOUTH_EAST       :south
+   org.bukkit.block.BlockFace/SOUTH_WEST       :south
+   org.bukkit.block.BlockFace/WEST_NORTH_WEST  :west
+   org.bukkit.block.BlockFace/NORTH_NORTH_WEST :north
+   org.bukkit.block.BlockFace/NORTH_NORTH_EAST :north
+   org.bukkit.block.BlockFace/EAST_NORTH_EAST  :east
+   org.bukkit.block.BlockFace/EAST_SOUTH_EAST  :east
+   org.bukkit.block.BlockFace/SOUTH_SOUTH_EAST :south
+   org.bukkit.block.BlockFace/SOUTH_SOUTH_WEST :south
+   org.bukkit.block.BlockFace/WEST_SOUTH_WEST  :west})
+
+(def standard-directions
+  {:north                                      :north
+   :east                                       :east
+   :south                                      :south
+   :west                                       :west
+   :up                                         :up
+   :down                                       :down
+   org.bukkit.block.BlockFace/NORTH            :north
+   org.bukkit.block.BlockFace/EAST             :east
+   org.bukkit.block.BlockFace/SOUTH            :south
+   org.bukkit.block.BlockFace/WEST             :west
+   org.bukkit.block.BlockFace/UP               :up
+   org.bukkit.block.BlockFace/DOWN             :down
+   org.bukkit.block.BlockFace/NORTH_EAST       :north-east
+   org.bukkit.block.BlockFace/NORTH_WEST       :north-west
+   org.bukkit.block.BlockFace/SOUTH_EAST       :south-east
+   org.bukkit.block.BlockFace/SOUTH_WEST       :south-west
+   org.bukkit.block.BlockFace/WEST_NORTH_WEST  :north-west
+   org.bukkit.block.BlockFace/NORTH_NORTH_WEST :north-west
+   org.bukkit.block.BlockFace/NORTH_NORTH_EAST :north-east
+   org.bukkit.block.BlockFace/EAST_NORTH_EAST  :north-east
+   org.bukkit.block.BlockFace/EAST_SOUTH_EAST  :south-east
+   org.bukkit.block.BlockFace/SOUTH_SOUTH_EAST :south-east
+   org.bukkit.block.BlockFace/SOUTH_SOUTH_WEST :south-west
+   org.bukkit.block.BlockFace/WEST_SOUTH_WEST  :south-west})
 
 (def direction-unit-offsets
   (let [offsets {org.bukkit.block.BlockFace/NORTH            [ 0  0 -1]
@@ -228,6 +334,7 @@
      :south (get offsets org.bukkit.block.BlockFace/SOUTH)
      :west  (get offsets org.bukkit.block.BlockFace/WEST))))
 
+
 (defn loc+direction
   ([loc block-face]
    (loc+ loc (direction-unit-offsets block-face)))
@@ -238,13 +345,6 @@
                   (* z scale)]]
      (loc+ loc offset))))
 
-
-(def overworld-instance (atom nil))
-(defn overworld []
-  (when (nil? @overworld-instance)
-    (reset! overworld-instance
-            (-> (org.bukkit.Bukkit/getWorlds) first)))
-  @overworld-instance)
 
 (comment
 
@@ -386,7 +486,44 @@
     :else
     (throw (RuntimeException. (format "Error: unrecognized time=%s" time-keyword)))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; materials helpers
 
+(comment
+
+  (.name (first (vec (.getEnumConstants org.bukkit.Material))))
+  )
+
+(def materials
+  (reduce
+   (fn [acc material]
+     (assoc acc
+            (-> material .name) material
+            (-> material .name .toLowerCase) material
+            (-> material .name .toLowerCase keyword) material
+            (-> material .name .toLowerCase csk/->kebab-case keyword) material))
+   {}
+   (.getEnumConstants org.bukkit.Material)))
+
+(def materials-affected-by-gravity
+  (reduce
+   #(conj %1 %2)
+   #{}
+   (->>
+    (.getEnumConstants org.bukkit.Material)
+    (filter #(.hasGravity %))
+    vec)))
+
+(comment
+
+  (->>
+   (.getEnumConstants org.bukkit.Material)
+   (filter #(.hasGravity %))
+   vec)
+
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (comment
   (set-world-time! :sunrise)
   (set-world-time! :morning)
@@ -628,8 +765,16 @@
 (defn get-block-at
   ([xx yy zz]
    (.getBlockAt (overworld) (round xx) (round yy) (round zz)))
-  ([[xx yy zz]]
-   (get-block-at xx yy zz)))
+  ([arg]
+   (cond
+     (vector? arg)
+     (apply get-block-at arg)
+
+     (isa? (class arg) org.bukkit.Location)
+     (.getBlockAt (overworld) (.getX arg) (.getY arg) (.getZ arg))
+
+     :else
+     (throw (RuntimeException. (format "get-block-at: unsure what arg=%s is" arg))))))
 
 (comment
 
@@ -1030,31 +1175,38 @@
 
 ;; NB: it's not possible to name a placed block!
 #_(defn find-named-block-near-player [player block-name]
-  ;; starting at where the player is standing, search outward
-  (loop [dist     1
-         max-dist 3 #_8]
-    (let [coords (shell-coords-around-location player dist)
-          item   (->> coords
-                      (filter (fn [coord]
-                                (let [block (get-block-at coord)]
-                                  (if (= org.bukkit.Material/STONE (.getType block))
-                                    (def block block))
-                                  (log/infof "block=%s" block)
-                                  nil)))
-                      first)]
-      (cond
-        item
-        item
+    ;; starting at where the player is standing, search outward
+    (loop [dist     1
+           max-dist 3 #_8]
+      (let [coords (shell-coords-around-location player dist)
+            item   (->> coords
+                        (filter (fn [coord]
+                                  (let [block (get-block-at coord)]
+                                    (if (= org.bukkit.Material/STONE (.getType block))
+                                      (def block block))
+                                    (log/infof "block=%s" block)
+                                    nil)))
+                        first)]
+        (cond
+          item
+          item
 
-        (zero? max-dist)
-        nil
+          (zero? max-dist)
+          nil
 
-        :else
-        (recur (inc dist) (dec max-dist))))))
+          :else
+          (recur (inc dist) (dec max-dist))))))
+;; (find-named-block-near-player "DominusSermonis" "marker")
+
+(defn find-blocks-of-material-around-player [player material dist]
+  (let [player (->player player)]
+    (->>
+     (all-coords-around-location player dist)
+     (map #(get-block-at %))
+     (filter #(= material (.getType %)))
+     vec)))
 
 (comment
-
-  ;; (find-named-block-near-player "DominusSermonis" "marker")
 
   block
   (.getState block)
@@ -1069,7 +1221,7 @@
   (.getSecondaryEffect (get-block-state! [-288 79 44]))
 
   (schedule!
-   (let [;; effect org.bukkit.potion.PotionEffectType/SPEED
+   (let [ ;; effect org.bukkit.potion.PotionEffectType/SPEED
          effect org.bukkit.potion.PotionEffectType/FAST_DIGGING
          beacon (get-block-state [-288 79 44])]
      (.setPrimaryEffect beacon effect)
@@ -1092,12 +1244,12 @@
           loc
           (.locateNearestStructure
            (overworld)
-           loc                             ;; Location (origin)
+           loc ;; Location (origin)
            ;; org.bukkit.StructureType/VILLAGE ;; StructureType
            ;; org.bukkit.StructureType/STRONGHOLD
            org.bukkit.StructureType/OCEAN_MONUMENT
-           500                              ;; int radius
-           true                             ;; bool findUnexplored
+           500  ;; int radius
+           true ;; bool findUnexplored
            )])
        (nth 2)
        location-to-xz))
@@ -1118,7 +1270,7 @@
          ;; [xx zz] [1024 576]     ;; village: snow
          ;; [xx zz] [1024 576]     ;; village: snow
          ;; [xx zz] [1392 1280]    ;; village: snow
-         [xx zz] [-1328 -1424]  ;; village: plans/desert
+         [xx zz] [-1328 -1424] ;; village: plans/desert
          ;; [xx zz] [-1360 1200]   ;; village: desert
          ;; [xx zz] [-976 -1504]   ;; village: savanah
          ;; [xx zz] [-992 1824]    ;; village: savanah

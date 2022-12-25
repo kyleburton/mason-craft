@@ -18,5 +18,7 @@
                  [ch.qos.logback/logback-classic   "1.2.11"]
 
                  ;; [org.spigotmc/spigot-api          "1.9"]
+                 ;; TODO: how did I find this? from the other build ...
                  [org.spigotmc/spigot-api          "1.19.3-R0.1-SNAPSHOT"]
+                 [camel-snake-kebab                "0.4.3"]
                  ])

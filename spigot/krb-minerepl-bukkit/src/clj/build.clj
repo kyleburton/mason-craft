@@ -97,24 +97,66 @@
 
   (.getWorld (core/get-player-named "DominusSermonis"))
 
-  (build-road
-   (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
-   (.getFacing (core/get-player-named "DominusSermonis"))
-   10
-   1
-   (fn [acc location _direction _length _step]
-     ;; make a road of half slabs (lower half)
-     ;; have four air blocks cleared overhead
-     ;; if the fifth block overhead is water, lava, sand or gravel, replace it with a glass block
-     ;; accumulate the location and type of each block changed
-     (let [block (.getBlockAt (.getWorld location) location)]
-       (.setType block org.bukkit.Material/SMOOTH_STONE_SLAB))))
-  ;; COBBLED_DEEPSLATE_SLAB
-  ;; POLISHED_DEEPSLATE_SLAB
+  (core/schedule!
+   (build-road
+    (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
+    (.getFacing (core/get-player-named "DominusSermonis"))
+    1024
+    1
+    (fn [acc location direction _length _step]
+      ;; make a two wide road of MATERIAL (lower half), as a "trough"
+      ;; G G G G  <--- if any of these are falling blocks (water/lava/gravel/sand), make them glass
+      ;; - - - -
+      ;; - - - -
+      ;; X - - X
+      ;; X X X X
+      ;;     ^--- player points to this block to start
+      ;; if the fifth block overhead is water, lava, sand or gravel, replace it with a glass block
+      ;; ? accumulate the location and type of each block changed ?
+      (let [material    org.bukkit.Material/BLUE_ICE
+            ;; offset is "next to" the block, think 90 degrees
+            offset      (-> direction
+                            core/cardinal-directions
+                            {:north [-1  0  0]
+                             :south [ 1  0  0]
+                             :east  [ 0  0  1]
+                             :west  [ 0  0 -1]})
+            air-offsets [(core/loc+ location offset [0 1 0])
+                         (core/loc+ location        [0 1 0])
 
-  (.getBlockAt
-   (.getWorld (core/get-player-named "DominusSermonis"))
-   (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999)))
+                         (core/loc+ location offset offset [0 2 0])
+                         (core/loc+ location offset        [0 2 0])
+                         (core/loc+ location               [0 2 0])
+                         (core/loc- location offset        [0 2 0])
+
+                         (core/loc+ location offset offset [0 3 0])
+                         (core/loc+ location offset        [0 3 0])
+                         (core/loc+ location               [0 3 0])
+                         (core/loc- location offset        [0 3 0])]
+
+            material-offsets [(core/loc+ location offset offset [0 1 0])
+                              (core/loc+ location offset offset)
+                              (core/loc+ location offset)
+                              (core/loc+ location)
+                              (core/loc- location offset)
+                              (core/loc- location offset [0 -1 0])]
+
+            glass-offsets [(core/loc+ location offset offset [0 4 0])
+                           (core/loc+ location offset        [0 4 0])
+                           (core/loc+ location               [0 4 0])
+                           (core/loc- location offset)       [0 4 0]]]
+        (doseq [loc material-offsets]
+          (.setType (core/get-block-at loc) material))
+        (doseq [loc air-offsets]
+          (.setType (core/get-block-at loc) (core/materials :air)))
+        (doseq [loc glass-offsets]
+          (let [block      (core/get-block-at loc)]
+            (when (core/materials-affected-by-gravity (.getType block))
+              (.setType block org.bukkit.Material/GLASS))))))))
+
+  (core/schedule!
+   (doseq [block (core/find-blocks-of-material-around-player "DominusSermonis" org.bukkit.Material/BLUE_ICE 18)]
+     (.setType block org.bukkit.Material/DIRT)))
   )
 
 
@@ -131,4 +173,81 @@
 
   (core/schedule! (set-blocks blocks))
 
-)
+  (core/schedule!
+   (doseq [block (core/find-blocks-of-material-around-player "DominusSermonis" org.bukkit.Material/BLUE_ICE 18)]
+     (.setType block org.bukkit.Material/DIRT)))
+
+
+  )
+
+(defn clear-to-bedrock [loc dist]
+  (def loc loc)
+  (def dist dist)
+  (let [direction      (.getFacing (core/get-player-named "DominusSermonis"))
+        forward-offset (-> direction
+                           core/cardinal-directions
+                           {:north [ 0  0 -1]
+                            :south [ 0  0  1]
+                            :east  [ 1  0  0]
+                            :west  [-1  0  0]})
+        left-offset    (-> direction
+                           core/cardinal-directions
+                           {:north [-1  0  0]
+                            :south [ 1  0  0]
+                            :east  [ 0  0 -1]
+                            :west  [ 0  0 1]})]
+    (doseq [xoff (range 0 dist)
+            zoff (range 0 dist)
+            :let [loc1 (core/loc+
+                        loc
+                        (core/loc* forward-offset xoff)
+                        (core/loc* left-offset    zoff))
+                  [xx yy zz] (core/location-to-xyz loc1)]]
+      (doseq [yy   (range (.getHighestBlockYAt (core/overworld) xx zz) -64 -1)
+              :let [block      (core/get-block-at [xx yy zz])
+                    block-type (.getType block)]]
+        (cond
+          (= (core/materials :bedrock) block-type)
+          nil
+          :else
+          (.setType block (core/materials :air)))))))
+
+
+(comment
+  (defn krbtmp [off]
+    (let [loc (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
+          loc (core/loc+ loc [(* off -32) 0 0])]
+      (core/schedule!
+       (time
+        (do
+          (clear-to-bedrock
+           loc
+           ;; NB: 256 is too much, it crashes the server
+           32)
+          (log/infof "krbtmp: completed off=%s" off))))))
+
+  (krbtmp 8)
+  (krbtmp 7)
+  (krbtmp 6)
+  (krbtmp 5)
+	(krbtmp 4)
+  (krbtmp 3)
+  (krbtmp 2)
+  (krbtmp 1)
+  (krbtmp 0)
+
+
+  (let [loc (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))]
+    (doseq [off (range 8 -1 -1)]
+      (let [loc (core/loc+ loc [(* off -32) 0 0])]
+        (core/schedule!
+         (time
+          (do
+            (clear-to-bedrock
+             loc
+             ;; NB: 256 is too much, it crashes the server
+             32)
+            (log/infof "doseq: completed off=%s" off)))))
+      (Thread/sleep 10000)))
+
+  )
