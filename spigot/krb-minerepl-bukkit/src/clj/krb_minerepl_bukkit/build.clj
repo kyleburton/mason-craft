@@ -1,6 +1,6 @@
 (ns krb-minerepl-bukkit.build
   (:require
-   [clojure.tools.logging :as log]
+   [clojure.tools.logging    :as log]
    [krb-minerepl-bukkit.core :as core]))
 
 (defn get-blocks [location direction length]
@@ -249,5 +249,186 @@
              32)
             (log/infof "doseq: completed off=%s" off)))))
       (Thread/sleep 10000)))
+
+  )
+
+
+(comment
+  ;; facing a "wall", iterate to the left & right; fill in any
+  ;; openings (lower than the getHighestBlockYAt) or if there is water
+
+  (.getType (.getBlock (.getLocation (.getTargetBlockExact player 9999))))
+  (.isAir (core/materials :seagrass))
+  (.isSolid (core/materials :seagrass))
+  (class (core/materials :seagrass))
+  (let [player          (core/get-player-named "DominusSermonis")
+        loc             (.getLocation (.getTargetBlockExact player 9999))
+        axis            (core/player-perpendicular-axis player)
+        iterations      16
+        horiz-locations (if (= :x axis)
+                          (core/loc+-x loc iterations)
+                          (core/loc+-z loc iterations))
+        xx              (.getX loc)
+        zz              (.getZ loc)]
+    (def player player)
+    (def loc loc)
+    (doseq [yy   (range -64 (inc (core/get-highest-block-y-at loc)))
+            loc2 horiz-locations
+            :let [[xx _yy zz] loc2
+                  block       (core/get-block-at xx yy zz)]]
+      ;; TODO: any watter logged/loggable
+      (when (or (core/=material? block
+                                 :water
+                                 :air
+                                 :lava
+                                 :cave-vines
+                                 :big-dripleaf
+                                 :clay
+                                 ;; NB: :pointed-dripstone doens't seem to get replaced?
+                                 :pointed-dripstone)
+                (not (.isSolid (.getType block))))
+        ;; (core/materials :pointed-dripstone)
+        (log/infof "comment: set to glass: %s isa %s" [xx yy zz] (.getType block))
+        (core/schedule!
+         (.setType block (core/->material :glass)))))
+    ;; range from left to right, from highest block down to bedrock,
+    ;; replace air, water or lava with glass
+
+    ;; facing direction to "axis"
+    ;; east/west   => Z
+    ;; north/south => X
+    ;; (core/get-highest-block-at loc)
+    (core/set-world-time! :morning)
+    [axis (inc (core/get-highest-block-y-at loc)) horiz-locations])
+
+  (krbtmp 0)
+
+  )
+
+;; north is -z
+;; south is +z
+;; west  is -x
+;; east  is +x
+(defn find-next-block-at-height [loc direction max-dist at-height]
+  (let [loc       (core/->loc loc)
+        xx        (.getX loc)
+        zz        (.getZ loc)
+        range-seq (cond
+                    (= :north direction) (core/range-down (.getZ loc) (- (.getZ loc) max-dist))
+                    (= :south direction) (core/range-up   (.getZ loc) (+ (.getZ loc) max-dist))
+                    (= :west  direction) (core/range-down (.getX loc) (- (.getX loc) max-dist))
+                    (= :east  direction) (core/range-up   (.getX loc) (+ (.getX loc) max-dist)))
+        coord-fn  (cond
+                    (= :north direction) (fn [%] [xx at-height  %])
+                    (= :south direction) (fn [%] [xx at-height  %])
+                    (= :west  direction) (fn [%] [%  at-height zz])
+                    (= :east  direction) (fn [%] [%  at-height zz]))]
+    (->>
+     range-seq
+     (map coord-fn)
+     (filter
+      (fn [coord]
+        (not (core/=material? coord :air))))
+     first
+     core/->loc)))
+
+(defn fill-layer [c1 c2 c3 c4 height material pred-fn]
+  (let [material (core/->material material)
+        coords   [c1 c2 c3 c4]
+        x-coords (->> coords (map core/->loc) (map #(.getX %)))
+        z-coords (->> coords (map core/->loc) (map #(.getZ %)))
+        x-min    (apply min x-coords)
+        x-max    (apply max x-coords)
+        z-min    (apply min z-coords)
+        z-max    (apply max z-coords)]
+    (doseq [xx   (range x-min (inc x-max))
+            zz   (range z-min (inc z-max))
+            :let [block (core/get-block-at [xx height zz])]]
+      (if (pred-fn block)
+        (.setType block material)))))
+
+
+(comment
+  (let [find-height -59
+        ;; find-height -58
+        fill-height -60]
+    (core/schedule!
+     (fill-layer
+      (find-next-block-at-height (core/->loc "DominusSermonis") :north 512 find-height)
+      (find-next-block-at-height (core/->loc "DominusSermonis") :south 512 find-height)
+      (find-next-block-at-height (core/->loc "DominusSermonis") :west  512 find-height)
+      (find-next-block-at-height (core/->loc "DominusSermonis") :east  512 find-height)
+      fill-height
+      :glass
+      (fn [block]
+        (if (< (* 10000 (rand)) 10) (log/infof "checking if glass block=%s" block))
+        (not (core/=material? block :bedrock))))))
+
+
+
+  ;; find the "walls" of the large open area - the
+  ;; north/south/east/west extents just above the bedrock, level -59
+
+  ;; east
+  (let [loc  (core/->loc "DominusSermonis")
+        dist 1024]
+    (->>
+     (core/range-up (.getX loc) (+ (.getX loc) dist))
+     (filter
+      (fn [xx]
+        (not (core/=material? [xx -59 (.getZ loc)] :air))))
+     (map (fn [xx]
+            [xx -59 (.getZ loc)]))
+     first))
+  [468.30000001192093 -59 1433.703285991409]
+
+  ;; west
+  (let [loc  (core/->loc "DominusSermonis")
+        dist 1024]
+    (->>
+     (core/range-down (.getX loc) (- (.getX loc) dist))
+     (filter
+      (fn [xx]
+        (not (core/=material? [xx -59 (.getZ loc)] :air))))
+     (map (fn [xx]
+            [xx -59 (.getZ loc)]))
+     first))
+  [112.8122704476587 -59 1432.587004373802]
+
+  ;; south
+  (let [loc  (core/->loc "DominusSermonis")
+        dist 1024]
+    (->>
+     (core/range-up (.getZ loc) (+ (.getZ loc) dist))
+     (filter
+      (fn [zz]
+        (not (core/=material? [(.getX loc) -59 zz] :air))))
+     (map (fn [zz]
+            [(.getX loc) -59 zz]))
+     first))
+  [300.30000001192093 -59 1604.1939984143335]
+
+  ;; north
+  (let [loc  (core/->loc "DominusSermonis")
+        dist 1024]
+    (->>
+     (core/range-down (.getZ loc) (- (.getZ loc) dist))
+     (filter
+      (fn [zz]
+        (not (core/=material? [(.getX loc) -59 zz] :air))))
+     (map (fn [zz]
+            [(.getX loc) -59 zz]))
+     first))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  (let [loc (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
+        loc (core/loc+ loc [(* off -32) 0 0])]
+    (core/schedule!
+     (time
+      (do
+        ;; fill in the non-bedrock from Y=-64 up to -60
+        ))))
 
   )

@@ -37,6 +37,7 @@ function run-spigot () {
     (
         cd ./spigot/krb-minerepl-bukkit
         lein classpath | tr : "\\n" | grep .m2/repository | tr "\\n" : | sed 's/:$//' > ../cp.out
+        echo -n ":$HOME/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/src/clj" >> ../cp.out
     )
     (
         cd ./spigot

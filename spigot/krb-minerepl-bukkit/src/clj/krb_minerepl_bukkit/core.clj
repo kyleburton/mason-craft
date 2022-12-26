@@ -88,12 +88,24 @@
 (defn get-player-named [name]
   (org.bukkit.Bukkit/getPlayer name))
 
+(defn player? [thing]
+  (and thing (isa? (class thing) org.bukkit.entity.Player))  )
+
+(defn location? [thing]
+  (isa? (class thing) org.bukkit.Location))
+
+(defn block? [thing]
+  (isa? (class thing) org.bukkit.block.Block))
+
+(defn material? [thing]
+  (isa? (class thing) org.bukkit.Material))
+
 (defn ->player [name-or-player]
   (cond
-    (isa? (class name-or-player) org.bukkit.entity.Player)
+    (player? name-or-player)
     name-or-player
 
-    (isa? (class name-or-player) String)
+    (string? name-or-player)
     (get-player-named name-or-player)
 
     :else
@@ -101,13 +113,16 @@
 
 (defn ->loc [player-or-loc]
   (cond
-    (isa? (class player-or-loc) org.bukkit.entity.Player)
+    (nil? player-or-loc)
+    nil
+
+    (player? player-or-loc)
     (.getLocation player-or-loc)
 
-    (isa? (class player-or-loc) String)
+    (string? player-or-loc)
     (-> player-or-loc ->player .getLocation)
 
-    (isa? (class player-or-loc) org.bukkit.Location)
+    (location? player-or-loc)
     player-or-loc
 
     (vector? player-or-loc)
@@ -202,7 +217,7 @@
     (vector? loc)
     loc
 
-    (isa? (class loc) org.bukkit.Location)
+    (location? loc)
     [(.getX loc) (.getY loc) (.getZ loc)]
 
     :else
@@ -253,6 +268,30 @@
     [(* xx scale)
      (* yy scale)
      (* zz scale)]))
+
+(defn loc+-x [loc ii]
+  (map
+   (fn [ii]
+     [(+ ii (.getX loc))
+      (.getY loc)
+      (.getZ loc)])
+   (range (* -1 ii) (inc ii))))
+
+(defn loc+-y [loc ii]
+  (map
+   (fn [ii]
+     [(.getX loc)
+      (+ ii (.getY loc))
+      (.getZ loc)])
+   (range (* -1 ii) (inc ii))))
+
+(defn loc+-z [loc ii]
+  (map
+   (fn [ii]
+     [(.getX loc)
+      (.getY loc)
+      (+ ii (.getZ loc))])
+   (range (* -1 ii) (inc ii))))
 
 (def cardinal-directions
   {:north                                      :north
@@ -344,6 +383,36 @@
                   (* y scale)
                   (* z scale)]]
      (loc+ loc offset))))
+
+(defn player-facing-axis [player-or-name]
+  (let [direction (-> player-or-name ->player .getFacing)]
+    (cond
+      (= direction org.bukkit.block.BlockFace/NORTH) :z
+      (= direction org.bukkit.block.BlockFace/SOUTH) :z
+      (= direction org.bukkit.block.BlockFace/EAST)  :x
+      (= direction org.bukkit.block.BlockFace/WEST)  :x)))
+
+(defn player-perpendicular-axis [player-or-name]
+  (let [direction (-> player-or-name ->player .getFacing)]
+    (cond
+      (= direction org.bukkit.block.BlockFace/NORTH) :x
+      (= direction org.bukkit.block.BlockFace/SOUTH) :x
+      (= direction org.bukkit.block.BlockFace/EAST)  :z
+      (= direction org.bukkit.block.BlockFace/WEST)  :z)))
+
+(defn left-perpendicular-offset [player-or-name]
+  (let [direction (.getFacing (->player player-or-name))]
+    (= direction (= direction org.bukkit.block.BlockFace/NORTH)) [-1  0 0]
+    (= direction (= direction org.bukkit.block.BlockFace/SOUTH)) [ 1  0 0]
+    (= direction (= direction org.bukkit.block.BlockFace/EAST))  [ 0  0 -1]
+    (= direction (= direction org.bukkit.block.BlockFace/WEST))  [ 0  0  1]))
+
+(defn right-perpendicular-offset [player-or-name]
+  (let [direction (.getFacing (->player player-or-name))]
+    (= direction org.bukkit.block.BlockFace/NORTH) [ 1  0 0]
+    (= direction org.bukkit.block.BlockFace/SOUTH) [-1  0 0]
+    (= direction org.bukkit.block.BlockFace/EAST)  [ 0  0  1]
+    (= direction org.bukkit.block.BlockFace/WEST)  [ 0  0 -1]))
 
 
 (comment
@@ -505,6 +574,43 @@
    {}
    (.getEnumConstants org.bukkit.Material)))
 
+(defn ->material [thing]
+  (cond
+    (material? thing)
+    thing
+
+    (block? thing)
+    (.getType thing)
+
+    (location? thing)
+    (.getType (.getBlock thing))
+
+    (or (keyword? thing) (string? thing))
+    (materials thing)
+
+    (and (vector? thing)
+         (= 3 (count thing)))
+    (.getType (apply get-block-at thing))
+
+    :else
+    (throw (RuntimeException. (format "->material?: unsure what thing=%s is" thing)))))
+
+(defn =material? [thing1 & things]
+  (loop [thing1            (->material thing1)
+         [thing2 & things] (map ->material things)]
+    (cond
+      (not thing1)
+      false
+
+      (not thing2)
+      false
+
+      (= thing1 thing2)
+      true
+
+      :else
+      (recur thing2 things))))
+
 (def materials-affected-by-gravity
   (reduce
    #(conj %1 %2)
@@ -513,6 +619,9 @@
     (.getEnumConstants org.bukkit.Material)
     (filter #(.hasGravity %))
     vec)))
+
+(defn material-affected-by-gravity? [thing]
+  (contains? materials-affected-by-gravity (->material thing)))
 
 (comment
 
@@ -751,8 +860,16 @@
 
   )
 
-(defn get-highest-block-y-at [xx zz]
-  (.getHighestBlockYAt (overworld) (int xx) (int zz)))
+(defn get-highest-block-y-at
+  ([thing]
+   (let [loc (->loc thing)]
+     (.getHighestBlockYAt (.getWorld loc) (-> loc .getX int) (-> loc .getZ int))))
+
+  ([xx zz]
+   (.getHighestBlockYAt (overworld) (int xx) (int zz))))
+
+(defn get-highest-block-at [loc]
+  (.getBlockAt (.getWorld loc) (.getX loc) (get-highest-block-y-at loc) (.getZ loc)))
 
 (defn round [val]
   (cond
@@ -767,10 +884,12 @@
    (.getBlockAt (overworld) (round xx) (round yy) (round zz)))
   ([arg]
    (cond
-     (vector? arg)
-     (apply get-block-at arg)
+     (and
+      (vector? arg)
+      (= 3 (count arg)))
+     (get-block-at (nth arg 0) (nth arg 1) (nth arg 2))
 
-     (isa? (class arg) org.bukkit.Location)
+     (location? arg)
      (.getBlockAt (overworld) (.getX arg) (.getY arg) (.getZ arg))
 
      :else
@@ -1302,3 +1421,14 @@
   (let [loc   (->loc loc)
         block (.getBlock loc)]
     [loc (.getType block)]))
+
+
+(defn range-up [ii jj]
+  (if (< ii jj)
+    (range ii jj)
+    (range jj ii)))
+
+(defn range-down [ii jj]
+  (if (< ii jj)
+    (range jj ii -1)
+    (range ii jj -1)))
