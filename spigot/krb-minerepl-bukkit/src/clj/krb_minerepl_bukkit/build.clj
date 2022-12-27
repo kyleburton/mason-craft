@@ -478,3 +478,28 @@
    #_.getKey
    #_.stop)
   )
+
+(defn automata [state actions]
+  (loop [[action & actions] actions]
+    (cond
+      (not action)
+      state
+      (= :forward))))
+
+
+(comment
+  (automata
+   ;; (-> "DominusSermonis" core/->loc core/location-to-xyzpy)[199 -59 1319 10.049989 -178.95055]
+   ;; state
+   ;; (.getDirection (core/->loc [199 -59 1319 10.049989 -178.95055]))
+   (atom {:loc (core/->loc [199 -59 1319 10.049989 -178.95055])})
+   ;; instructions
+   [:forward
+    :forward
+    [:repeat 16 :up]
+    [:branch
+     [:repeat 8
+      [:place :smooth-stone]]]]
+   )
+
+)

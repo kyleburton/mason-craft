@@ -112,6 +112,7 @@
     (throw (RuntimeException. (format "->player: unrecognized name-or-player=%s/%s" (class name-or-player) name-or-player)))))
 
 (defn ->loc [player-or-loc]
+  "Convert item (string{player-name}, player, Location or xyz vector) into a org.bukkit.Location."
   (cond
     (nil? player-or-loc)
     nil
@@ -126,12 +127,14 @@
     player-or-loc
 
     (vector? player-or-loc)
-    (let [[xx yy zz] player-or-loc]
+    (let [[xx yy zz pitch yaw] player-or-loc]
       (org.bukkit.Location.
        (overworld) ;; nb: this is an assumption
        xx
        yy
-       zz))
+       zz
+       (or yaw 0 0)
+       (or pitch 0.0)))
 
     :else
     (throw (RuntimeException. (format "->loc: unrecognized player-or-loc=%s/%s" (class player-or-loc) player-or-loc)))))
@@ -375,6 +378,7 @@
 
 
 (defn loc+direction
+  "Increment loc by scale blocks in the direction of block-face"
   ([loc block-face]
    (loc+ loc (direction-unit-offsets block-face)))
   ([loc block-face scale]
@@ -414,8 +418,49 @@
     (= direction org.bukkit.block.BlockFace/EAST)  [ 0  0  1]
     (= direction org.bukkit.block.BlockFace/WEST)  [ 0  0 -1]))
 
+(defn ->direction [thing]
+  (def thing thing)
+  (cond
+    (string? thing)
+    (cardinal-directions (.getFacing (get-player-named thing)))
+
+    (player? thing)
+    (cardinal-directions (.getFacing thing))
+
+    (and (vector? thing)
+         (>= (count thing) 3))
+    (->direction (->loc thing))
+
+    (location? thing)
+    (let [yaw (.getYaw thing)]
+      (def yaw yaw)
+      (cond
+        ;; south:         0 /   0
+        ;; west:         90 /  90
+        ;; north:       180 / 180 and -180
+        ;; east:        270 / -90
+        (or
+         (and (>= yaw 135) (<= yaw 180))
+         (and (>= yaw -180) (<= yaw -135)))
+        :north
+
+        (and (>= yaw -135) (<=  yaw -45))
+        :east
+
+        (and (>= yaw  -45) (<=  yaw  45))
+        :south
+
+        (and (>=  yaw 45) (<= yaw 135))
+        :west
+
+        :else
+        (throw (RuntimeException. (format "->direction: unable to convert yaw=%s into direction, loc=%s" yaw thing)))))))
 
 (comment
+  (->direction "DominusSermonis")
+  (->direction (get-player-location "DominusSermonis"))
+
+  (->loc (get-player-location "DominusSermonis"))
 
   ;; (import 'com.github.kyleburton.krb_minerepl_bukkit.REPL)
   ;; com.github.kyleburton.krb_minerepl_bukkit.REPL
@@ -582,7 +627,7 @@
    (cond
      (and
       (vector? arg)
-      (= 3 (count arg)))
+      (>= (count arg) 3))
      (get-block-at (nth arg 0) (nth arg 1) (nth arg 2))
 
      (location? arg)
@@ -626,7 +671,7 @@
     (materials thing)
 
     (and (vector? thing)
-         (= 3 (count thing)))
+         (>= (count thing) 3))
     (.getType (apply get-block-at thing))
 
     :else
