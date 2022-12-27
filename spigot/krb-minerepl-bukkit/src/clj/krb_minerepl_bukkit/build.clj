@@ -181,9 +181,11 @@
   )
 
 (defn clear-to-bedrock [loc dist]
-  (def loc loc)
-  (def dist dist)
-  (let [direction      (.getFacing (core/get-player-named "DominusSermonis"))
+  ;; TODO: remove the hard-coded player, take direction from loc as the center
+  (let [direction      (let [player (core/get-player-named "DominusSermonis")]
+                         (if player
+                           (.getFacing player)
+                           :north))
         forward-offset (-> direction
                            core/cardinal-directions
                            {:north [ 0  0 -1]
@@ -301,6 +303,8 @@
     (core/set-world-time! :morning)
     [axis (inc (core/get-highest-block-y-at loc)) horiz-locations])
 
+  ;; glass wall ^^^
+
   (krbtmp 0)
 
   )
@@ -323,6 +327,10 @@
                     (= :south direction) (fn [%] [xx at-height  %])
                     (= :west  direction) (fn [%] [%  at-height zz])
                     (= :east  direction) (fn [%] [%  at-height zz]))]
+    ;; (find-next-block-at-height loc :north 512 find-height)
+    (def coord-fn coord-fn)
+    (def range-seq range-seq)
+    ;; (->> range-seq (map coord-fn) (take 3))
     (->>
      range-seq
      (map coord-fn)
@@ -341,8 +349,8 @@
         x-max    (apply max x-coords)
         z-min    (apply min z-coords)
         z-max    (apply max z-coords)]
-    (doseq [xx   (range x-min (inc x-max))
-            zz   (range z-min (inc z-max))
+    (doseq [xx   (range (inc x-min) x-max)
+            zz   (range (inc z-min) z-max)
             :let [block (core/get-block-at [xx height zz])]]
       (if (pred-fn block)
         (.setType block material)))))
@@ -363,72 +371,110 @@
       (fn [block]
         (if (< (* 10000 (rand)) 10) (log/infof "checking if glass block=%s" block))
         (not (core/=material? block :bedrock))))))
+  )
 
+(defn find-center-of-corners [c1 c2 c3 c4]
+  (let [coords   [c1 c2 c3 c4]
+        x-coords (->> coords (map core/->loc) (map #(.getX %)))
+        y-coords (->> coords (map core/->loc) (map #(.getY %)))
+        z-coords (->> coords (map core/->loc) (map #(.getZ %)))
+        x-min    (apply min x-coords)
+        x-max    (apply max x-coords)
+        y-min    (apply min y-coords)
+        y-max    (apply max y-coords)
+        z-min    (apply min z-coords)
+        z-max    (apply max z-coords)]
+    (core/->loc [(/ (+ x-min x-max) 2)
+                 (/ (+ y-min y-max) 2)
+                 (/ (+ z-min z-max) 2)])))
 
+(comment
+  ;; find the center of 4 coords
+  (let [loc         (core/->loc "DominusSermonis")
+        find-height -59]
+    (def find-height find-height)
+    (find-center-of-corners
+     (find-next-block-at-height loc :north 512 find-height)
+     (find-next-block-at-height loc :south 512 find-height)
+     (find-next-block-at-height loc :west  512 find-height)
+     (find-next-block-at-height loc :east  512 find-height)))
 
-  ;; find the "walls" of the large open area - the
-  ;; north/south/east/west extents just above the bedrock, level -59
-
-  ;; east
-  (let [loc  (core/->loc "DominusSermonis")
-        dist 1024]
-    (->>
-     (core/range-up (.getX loc) (+ (.getX loc) dist))
-     (filter
-      (fn [xx]
-        (not (core/=material? [xx -59 (.getZ loc)] :air))))
-     (map (fn [xx]
-            [xx -59 (.getZ loc)]))
-     first))
-  [468.30000001192093 -59 1433.703285991409]
-
-  ;; west
-  (let [loc  (core/->loc "DominusSermonis")
-        dist 1024]
-    (->>
-     (core/range-down (.getX loc) (- (.getX loc) dist))
-     (filter
-      (fn [xx]
-        (not (core/=material? [xx -59 (.getZ loc)] :air))))
-     (map (fn [xx]
-            [xx -59 (.getZ loc)]))
-     first))
-  [112.8122704476587 -59 1432.587004373802]
-
-  ;; south
-  (let [loc  (core/->loc "DominusSermonis")
-        dist 1024]
-    (->>
-     (core/range-up (.getZ loc) (+ (.getZ loc) dist))
-     (filter
-      (fn [zz]
-        (not (core/=material? [(.getX loc) -59 zz] :air))))
-     (map (fn [zz]
-            [(.getX loc) -59 zz]))
-     first))
-  [300.30000001192093 -59 1604.1939984143335]
-
-  ;; north
-  (let [loc  (core/->loc "DominusSermonis")
-        dist 1024]
-    (->>
-     (core/range-down (.getZ loc) (- (.getZ loc) dist))
-     (filter
-      (fn [zz]
-        (not (core/=material? [(.getX loc) -59 zz] :air))))
-     (map (fn [zz]
-            [(.getX loc) -59 zz]))
-     first))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  (let [loc (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
-        loc (core/loc+ loc [(* off -32) 0 0])]
+  (let [loc (core/->loc [455 71 1320])
+        loc (core/loc+ loc [-256 0 0])]
     (core/schedule!
-     (time
-      (do
-        ;; fill in the non-bedrock from Y=-64 up to -60
-        ))))
+     (.teleport (core/get-player-named "DominusSermonis") loc))
+    loc)
 
+  (core/->loc "DominusSermonis")
+  )
+
+(comment
+  (def state (atom {:stop       false
+                    :count      0
+                    :batch-size 128
+                    :delay      100
+                    :xx-start   217}))
+
+  (let [;; loc     (core/->loc "DominusSermonis")
+        loc     (core/->loc [199 100 1320])
+        dist    256
+        ;; dist    64
+        xx      (.getX loc)
+        ;; xx-min  (- xx dist)
+        ;; (- 199 256)
+        ;; xx-min  -57
+        ;; xx-min  186
+        xx-min  (-> state deref :xx-start)
+        xx-max  (+ xx dist)  ;; (+ 199 256) 455
+        yy      (.getY loc)
+        zz      (.getZ loc)
+        zz-min  (- zz dist)
+        zz-max  (+ zz dist)
+        xx-seq  (range xx-min xx-max)
+        zz-seq  (range zz-min zz-max)
+        loc-seq (for [xx xx-seq zz zz-seq]
+                  [xx yy zz])
+        recfunc (fn recfunc [locs]
+                  (let [batch-size (-> state deref :batch-size)
+                        some-locs (take batch-size locs)
+                        locs      (drop batch-size locs)]
+                    (cond
+                      (empty? some-locs)
+                      :done
+
+                      (:stop @state)
+                      (do
+                        (log/infof "recfuncstopping")
+                        :stopped)
+
+                      :else
+                      (core/schedule!
+                       (log/infof "recfunc: processing block of %s first=%s" (count some-locs) (first some-locs))
+                       (doseq [loc some-locs]
+                         (clear-to-bedrock loc 1))
+                       (swap! state merge {:count (inc (-> state deref :count))})
+                       (future
+                         (Thread/sleep (:delay @state))
+                         (recfunc locs))))))]
+    (recfunc loc-seq))
+
+  (swap! state merge {:stop false, :delay 1000 :xx-start -54 :batch-size 256})
+  (swap! state merge {:stop true})
+
+  (krbtmp 0)
+  (core/set-world-time! :morning)
+
+  ;; kill the thread
+  (->>
+   (Thread/getAllStackTraces)
+   (filter
+    (fn [[thread stack-trace-elements]]
+      (some
+       (fn [elt]
+         (def elt elt)
+         (.contains (str elt) "recfunc"))
+       stack-trace-elements)))
+   first
+   #_.getKey
+   #_.stop)
   )

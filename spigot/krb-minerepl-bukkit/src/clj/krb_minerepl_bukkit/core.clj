@@ -26,8 +26,8 @@
     (.doConfigure joran-configurator xml-config-file-path)))
 
 (comment
-  (logback-configure! "/home/kyle/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
   (logback-configure! "/Users/kburton/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
+  (logback-configure! "/home/kyle/code/github.com/kyleburton/mason-craft/spigot/krb-minerepl-bukkit/resources/logback.xml")
   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -555,6 +555,43 @@
     :else
     (throw (RuntimeException. (format "Error: unrecognized time=%s" time-keyword)))))
 
+
+(defn get-highest-block-y-at
+  ([thing]
+   (let [loc (->loc thing)]
+     (.getHighestBlockYAt (.getWorld loc) (-> loc .getX int) (-> loc .getZ int))))
+
+  ([xx zz]
+   (.getHighestBlockYAt (overworld) (int xx) (int zz))))
+
+(defn get-highest-block-at [loc]
+  (.getBlockAt (.getWorld loc) (.getX loc) (get-highest-block-y-at loc) (.getZ loc)))
+
+(defn round [val]
+  (cond
+    (int? val)
+    val
+
+    :else
+    (Math/round val)))
+
+(defn get-block-at
+  ([xx yy zz]
+   (.getBlockAt (overworld) (round xx) (round yy) (round zz)))
+  ([arg]
+   (cond
+     (and
+      (vector? arg)
+      (= 3 (count arg)))
+     (get-block-at (nth arg 0) (nth arg 1) (nth arg 2))
+
+     (location? arg)
+     (.getBlockAt (overworld) (.getX arg) (.getY arg) (.getZ arg))
+
+     :else
+     (throw (RuntimeException. (format "get-block-at: unsure what arg=%s is" arg))))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; materials helpers
 
@@ -859,41 +896,6 @@
   (replace-with-material-around-player "kyle_burton" 10 org.bukkit.Material/TNT org.bukkit.Material/AIR)
 
   )
-
-(defn get-highest-block-y-at
-  ([thing]
-   (let [loc (->loc thing)]
-     (.getHighestBlockYAt (.getWorld loc) (-> loc .getX int) (-> loc .getZ int))))
-
-  ([xx zz]
-   (.getHighestBlockYAt (overworld) (int xx) (int zz))))
-
-(defn get-highest-block-at [loc]
-  (.getBlockAt (.getWorld loc) (.getX loc) (get-highest-block-y-at loc) (.getZ loc)))
-
-(defn round [val]
-  (cond
-    (int? val)
-    val
-
-    :else
-    (Math/round val)))
-
-(defn get-block-at
-  ([xx yy zz]
-   (.getBlockAt (overworld) (round xx) (round yy) (round zz)))
-  ([arg]
-   (cond
-     (and
-      (vector? arg)
-      (= 3 (count arg)))
-     (get-block-at (nth arg 0) (nth arg 1) (nth arg 2))
-
-     (location? arg)
-     (.getBlockAt (overworld) (.getX arg) (.getY arg) (.getZ arg))
-
-     :else
-     (throw (RuntimeException. (format "get-block-at: unsure what arg=%s is" arg))))))
 
 (comment
 
