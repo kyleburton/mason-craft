@@ -479,27 +479,215 @@
    #_.stop)
   )
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(declare automata)
+
+(defn automata:forward [state & args]
+  (update-in state [:loc] core/loc-forward 1))
+
+(comment
+  (core/loc-forward (core/->loc [199 -59 1319 10.049989 -178.95055]) 1)
+  (automata:forward
+   {:loc (core/->loc [199 -59 1319 10.049989 -178.95055])})
+  )
+
+(defn automata:backward [state & args]
+  (update-in state [:loc] core/loc-forward -1))
+
+(defn automata:repeat [state times & args]
+  (dissoc
+   (reduce
+    (fn [state ii]
+      (log/infof "automata:repeat: times=%s; ii=%s" times ii)
+      (automata (assoc state :ii ii) args))
+    state
+    (range times))
+   :ii))
+
+(defn automata:branch [state & args]
+  (automata state args)
+  state)
+
+(defn automata:place [state material]
+  (let [block (.getBlockAt (:world state) (:loc state))]
+    (.setType block (core/->material material)))
+  state)
+
+(defn automata:clear [state]
+  (let [block (.getBlockAt (:world state) (:loc state))]
+    (.setType block (core/->material :air)))
+  state)
+
+(defn automata:up-one [state]
+  (update-in state [:loc] core/loc-up 1))
+
+(defn automata:down-one [state]
+  (update-in state [:loc] core/loc-up -1))
+
+(defn automata:turn-left [state & args]
+  (update-in state [:loc] core/loc-turn-left))
+
+(defn automata:left [state & args]
+  (update-in state [:loc] core/loc-left (first args)))
+
+(defn automata:turn-right [state & args]
+  (update-in state [:loc] core/loc-turn-right))
+
+(defn automata:right [state & args]
+  (update-in state [:loc] core/loc-right (first args)))
+
+(defn automata:turn-around [state & args]
+  (->
+   state
+   (update-in [:loc] core/loc-turn-left)
+   (update-in [:loc] core/loc-turn-left)))
+
+(defn automata:define-pattern [state name & args]
+  (log/infof "automata:define-pattern: name=%s || %s" name args)
+  (assoc-in state [:patterns name] args))
+
+(defn automata:apply-pattern [state pattern & args]
+  (log/infof "automata:apply-pattern: pattern=%s || %s" pattern (-> state :patterns (get pattern)))
+  (dissoc
+   (automata
+    (assoc state :pattern pattern)
+    (-> state :patterns (get pattern)))
+   :pattern))
+
+(def automata-functions
+  {:forward    #'automata:forward
+   :backward   #'automata:backward
+   :repeat     #'automata:repeat
+   :branch     #'automata:branch
+   :place      #'automata:place
+   :clear      #'automata:clear
+   ;; TODO: do we want the cardinal directions?
+   ;; :north  #'automata:north
+   ;; :east   #'automata:east
+   ;; :south  #'automata:south
+   ;; :west   #'automata:west
+   :up-one     #'automata:up-one
+   :down-one   #'automata:down-one
+   :turn-left  #'automata:turn-left
+   :left       #'automata:left
+   :turn-right #'automata:turn-right
+   :right      #'automata:right
+   :define     #'automata:define-pattern
+   :pattern    #'automata:apply-pattern})
+
+(defn automata-compound? [action]
+  (and (vector? action)
+       (-> action first keyword?)))
+
+(defn automata-lookup-fn [action]
+  (def action action)
+  (cond
+    (keyword? action)
+    [(automata-functions action)]
+
+    (and (vector? action)
+         (-> action first keyword?))
+    (let [[action-fn-name & args] action
+          action-fn               (automata-functions action-fn-name)]
+      (when action-fn
+        [action-fn args]))
+
+    :else
+    (throw (RuntimeException. (format "automata-lookup-fn: unrecognized action=%s" action)))))
+
 (defn automata [state actions]
-  (loop [[action & actions] actions]
+  (def state state)
+  (def actions actions)
+  ;; todo: convert this to a reduce / trampoline
+  ;; - convert (map) actions into a seq of [:action action-fn args]
+  ;; - then reduce it
+  (loop [[action & actions] actions
+         state              state]
     (cond
       (not action)
       state
-      (= :forward))))
 
+      :else
+      (let [[action-fn args] (automata-lookup-fn action)]
+        (log/infof "automata: action=%s; loc=%s" action (:loc state))
+        (when-not action-fn
+          (throw (RuntimeException. (format "automata: error: unrecognized action=%s" action))))
+        (recur actions (apply action-fn state args))))))
+
+(defn clear-contiguous-blocks [loc limit]
+  (loop [locs (->> (core/adjacent-locations loc)
+                   (filter #(not (core/=material? % :air))))
+         ii   0]
+    (cond
+      (>= ii limit)
+      :hit-limit
+
+      (not locs)
+      :done
+
+      :else
+      (do
+        (doseq [loc locs]
+          (log/infof "clear-contiguous-blocks: loc=%s material=%s" loc (core/->material loc))
+          (.setType (core/->block loc) (core/->material :air)))
+        (recur
+         (->>
+          locs
+          (mapcat core/adjacent-locations)
+          (filter #(not (core/=material? % :air))))
+         (inc ii))))))
 
 (comment
-  (automata
-   ;; (-> "DominusSermonis" core/->loc core/location-to-xyzpy)[199 -59 1319 10.049989 -178.95055]
-   ;; state
-   ;; (.getDirection (core/->loc [199 -59 1319 10.049989 -178.95055]))
-   (atom {:loc (core/->loc [199 -59 1319 10.049989 -178.95055])})
-   ;; instructions
-   [:forward
-    :forward
-    [:repeat 16 :up]
-    [:branch
-     [:repeat 8
-      [:place :smooth-stone]]]]
-   )
+  (core/schedule!
+   (.teleport (core/get-player-named "DominusSermonis")
+              (core/->loc [199 -59 1319 10.049989 -178.95055])))
 
-)
+  (core/schedule!
+   (clear-contiguous-blocks
+    (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
+    1024))
+
+  (core/schedule!
+   (automata
+    ;; (-> "DominusSermonis" core/->loc core/location-to-xyzpy)[199 -59 1319 10.049989 -178.95055]
+    ;; state
+    ;; (.getDirection (core/->loc [199 -59 1319 10.049989 -178.95055]))
+    {:world    (core/overworld)
+     :loc      (core/->loc [199 -59 1319 10.049989 -178.95055])
+     :patterns {}}
+    ;; instructions
+    [:forward
+     :forward
+     [:repeat 8 :up-one]
+     ;; ...
+     ;; - side wall 3 high
+     ;; - spawn platform / channel, 7 then 8, 2 wide
+     ;; - side wall 3 high
+     [:define
+      :spawn-floor-wall
+      [:repeat 3
+       [:branch
+        [:pattern :spawn-floor-line]]
+       :up-one]
+      [:set :material :smooth-stone-slab]]
+     [:define
+      :spawn-floor-line
+      [:repeat 3
+       [:branch
+        [:repeat 7
+         [:place :smooth-stone]
+         :forward]
+        :backward
+        :up-one
+        [:repeat 10
+         [:place :smooth-stone]
+         :forward]]]]
+     ;; start
+     [:branch
+      [:pattern :spawn-floor-wall]]
+     [:repeat 4
+      [:branch
+       [:pattern :spawn-floor-line]]
+      :left]]))
+
+  )

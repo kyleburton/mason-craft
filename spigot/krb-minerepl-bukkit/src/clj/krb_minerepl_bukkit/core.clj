@@ -133,12 +133,14 @@
        xx
        yy
        zz
-       (or yaw 0 0)
+       (or yaw   0.0)
        (or pitch 0.0)))
 
     :else
     (throw (RuntimeException. (format "->loc: unrecognized player-or-loc=%s/%s" (class player-or-loc) player-or-loc)))))
 
+(defn ->block [thing]
+  (.getBlock (->loc thing)))
 
 ;; X is east (pos) / west (neg)
 ;; Y is height
@@ -195,7 +197,9 @@
                  (.getWorld loc)
                  (.getX loc)
                  (.getY loc)
-                 (.getZ loc))]
+                 (.getZ loc)
+                 (.getYaw loc)
+                 (.getPitch loc))]
     (cond
       (= dir "SOUTH")
       ;; :+1z
@@ -227,7 +231,14 @@
     (throw (RuntimeException. (format "loc->coords unsure how to get [x,y,z] from loc=%s" loc)))))
 
 (defn loc+ [& locations]
-  (let [[xx yy zz] (->>
+  (let [loc1       (first locations)
+        yaw        (if loc1
+                     (.getYaw loc1)
+                     0)
+        pitch      (if loc1
+                     (.getPitch loc1)
+                     0)
+        [xx yy zz] (->>
                     locations
                     (map loc->coords)
                     (reduce
@@ -241,12 +252,18 @@
      xx
      yy
      zz
-     0 ;; yaw
-     0 ;; pitch
-     )))
+     yaw
+     pitch)))
 
 (defn loc- [& locations]
-  (let [[xx yy zz] (->>
+  (let [loc1       (first locations)
+        yaw        (if loc1
+                     (.getYaw loc1)
+                     0)
+        pitch      (if loc1
+                     (.getPitch loc1)
+                     0)
+        [xx yy zz] (->>
                     locations
                     (map loc->coords)
                     (reduce
@@ -259,9 +276,8 @@
      xx
      yy
      zz
-     0 ;; yaw
-     0 ;; pitch
-     )))
+     yaw
+     pitch)))
 
 (defn loc* [loc scale]
   (let [loc        (->loc loc)
@@ -377,17 +393,6 @@
      :west  (get offsets org.bukkit.block.BlockFace/WEST))))
 
 
-(defn loc+direction
-  "Increment loc by scale blocks in the direction of block-face"
-  ([loc block-face]
-   (loc+ loc (direction-unit-offsets block-face)))
-  ([loc block-face scale]
-   (let [[x y z] (direction-unit-offsets block-face)
-         offset  [(* x scale)
-                  (* y scale)
-                  (* z scale)]]
-     (loc+ loc offset))))
-
 (defn player-facing-axis [player-or-name]
   (let [direction (-> player-or-name ->player .getFacing)]
     (cond
@@ -467,6 +472,19 @@
   ;; com.github.kyleburton.krb_minerepl_bukkit.REPL/server
   (java.lang.Class/forName  "com.github.kyleburton.krb_minerepl_bukkit.REPL")
   )
+
+(defn loc+direction
+  "Increment loc by scale blocks in the direction of block-face"
+  ([loc]
+   (loc+ loc (direction-unit-offsets (->direction loc))))
+  ([loc block-face]
+   (loc+ loc (direction-unit-offsets block-face)))
+  ([loc block-face scale]
+   (let [[x y z] (direction-unit-offsets block-face)
+         offset  [(* x scale)
+                  (* y scale)
+                  (* z scale)]]
+     (loc+ loc offset))))
 
 
 (defn overworld-live-entities []
@@ -1449,15 +1467,11 @@
          ;; [xx zz] [-752 256]     ;; ocean monument (big)
          ;; [xx zz] [-752 2144]    ;; ocean monument
          yy     (inc (.getHighestBlockYAt world xx zz))
-         dest   (org.bukkit.Location.
-                 world
-                 xx
-                 yy
-                 zz)]
+         dest   (->loc [xx yy zz])]
      (.teleport player dest)))
 
   (schedule!
-   (.teleport (get-player-named "kyle_burton") (org.bukkit.Location. (overworld) -289 77 41)))
+   (.teleport (get-player-named "kyle_burton") (->loc [-289 77 41])))
 
 
   ;; TODO: generate more structures
@@ -1469,6 +1483,68 @@
         block (.getBlock loc)]
     [loc (.getType block)]))
 
+(defn yaw-turn-left [yaw]
+  (let [yaw (- yaw 90)]
+    (if (<= yaw -180)
+      (+ yaw 360)
+      yaw)))
+
+(defn yaw-turn-right [yaw]
+  (let [yaw (+ yaw 90)]
+    (if (> yaw 180)
+      (- yaw 360)
+      yaw)))
+
+(defn loc-turn-left [loc]
+  (let [yaw (.getYaw loc)]
+    (.setYaw loc (yaw-turn-left loc))
+    loc))
+
+(defn loc-left [loc dist]
+  (let [dist (or dist 1)
+        dir  (->direction loc)]
+    (cond
+      ;; north (-Z) => west (-X)
+      (= dir :north)
+      (loc+ loc [-1 0 0])
+
+      ;; east (+X) => north (-Z)
+      (= dir :east)
+      (loc+ loc [0 0 -1])
+
+      ;; south (+Z) => east (+X)
+      (= dir :south)
+      (loc+ loc [1 0 0])
+
+      ;; west (-X) => south (+Z)
+      (= dir :west)
+      [0 0 1])))
+
+(defn loc-turn-right [loc]
+  (let [yaw (.getYaw loc)]
+    (.setYaw loc (yaw-turn-right loc))
+    loc))
+
+(defn loc-right [loc dist]
+  (let [dist (or dist 1)
+        dir  (->direction loc)]
+    (cond
+      ;; north (-Z) => east (+X)
+      (= dir :north)
+      (loc+ loc [1 0 0])
+
+      ;; east (+X) => south (+Z)
+      (= dir :east)
+      (loc+ loc [0 0 1])
+
+      ;; south (+Z) => west (-X)
+      (= dir :south)
+      (loc+ loc [-1 0 0])
+
+      ;; west (-X) => north (-Z)
+      (= dir :west)
+      [0 0 -1])))
+
 
 (defn range-up [ii jj]
   (if (< ii jj)
@@ -1479,3 +1555,73 @@
   (if (< ii jj)
     (range jj ii -1)
     (range ii jj -1)))
+
+(defn loc-forward [loc dist]
+  (def loc loc)
+  (def dist dist)
+  (let [direction (->direction loc)]
+    (cond
+      (= :north direction) (loc+ loc [          0 0 (* -1 dist)]) ;; -Z
+      (= :east  direction) (loc+ loc [       dist 0           0]) ;; +X
+      (= :south direction) (loc+ loc [          0 0        dist]) ;; +Z
+      (= :west  direction) (loc+ loc [(* -1 dist) 0           0]) ;; -X
+      :else           loc)))
+
+(comment
+
+  (loc-forward (->loc [199 -59 1319 10.049989 -178.95055]) 1)
+  ;; #object[org.bukkit.Location 0x241db5f "Location{world=CraftWorld{name=world},x=199.0,y=-59.0,z=1318.0,pitch=10.049989,yaw=-178.95055}"]
+  )
+
+(defn loc-backward [loc dist]
+  (let [direciton (->direction loc)]
+    (cond
+      (= :north dist) (loc+ loc [          0 0         dist]) ;; -Z, negated
+      (= :east dist)  (loc+ loc [(* -1 dist) 0            0]) ;; +X, negated
+      (= :south dist) (loc+ loc [          0 0  (* -1 dist)]) ;; +Z, negated
+      (= :west dist)  (loc+ loc [       dist 0            0]) ;; -X, negated
+      :else           loc)))
+
+(defn loc-up [loc dist]
+  (loc+ loc [0 dist 0]))
+
+(defn loc-down [loc dist]
+  (loc+ loc [0 (* -1 dist) 0]))
+
+(defn adjacent-locations [loc]
+  (mapv
+   (fn [l2]
+     (loc+ loc l2))
+   (for [[xx zz]
+         [[ 0  0]
+          [ 0 -1]
+          [ 0  1]
+          [-1  0]
+          [ 1  0]
+          [ 1  1]
+          [-1 -1]
+          [-1  1]
+          [ 1  -1]]
+         yy [-1 0 1]]
+     [xx yy zz])))
+
+
+(comment
+  (adjacent-locations (->loc [1 1 1]))
+  (vec
+   (filter
+    #(not= [0 0 0] %)
+    (for [[xx zz]
+          [[ 0  0]
+           [ 0 -1]
+           [ 0  1]
+           [-1  0]
+           [ 1  0]
+           [ 1  1]
+           [-1 -1]
+           [-1  1]
+           [ 1  -1]]
+          yy [-1 0 1]]
+      [xx yy zz])))
+
+  )
