@@ -1,5 +1,6 @@
 (ns krb-minerepl-bukkit.core
   (:require
+   [clojure.string         :as string]
    [clojure.tools.logging  :as log]
    [camel-snake-kebab.core :as csk]))
 
@@ -659,12 +660,7 @@
 ;; materials helpers
 
 (comment
-
-  (.name (first (vec (.getEnumConstants org.bukkit.Material))))
-  )
-
-(comment
-  (->> materials keys (filter keyword?))
+  (->> materials keys (filter keyword?) sort)
   (:smooth-stone-slab materials)
   )
 
@@ -678,6 +674,50 @@
             (-> material .name .toLowerCase csk/->kebab-case keyword) material))
    {}
    (.getEnumConstants org.bukkit.Material)))
+
+(defn apply-block-attr [block attr]
+  (let [block-data (.getBlockData block)]
+    (cond
+      (= :top attr)
+      (.setType block-data org.bukkit.block.data.type.Slab$Type/TOP)
+
+      (= :bottom attr)
+      (.setType block-data org.bukkit.block.data.type.Slab$Type/BOTTOM)
+
+      (= :north attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/NORTH)
+
+      (= :east attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/EAST)
+
+      (= :south attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/SOUTH)
+
+      (= :west attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/WEST)
+
+      (= :up attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/UP)
+
+      (= :down attr)
+      (.setFacing block-data org.bukkit.block.BlockFace/DOWN)
+
+      :else
+      (throw (RuntimeException. (format "apply-block-attr: unrecognized attr=%s" attr))))
+    (.setBlockData block block-data))
+  block)
+
+(defn parse-material [material0]
+  ;; TODO: if thing is a keyword it may contain modifiers
+  ;; :smooth-stone-slab.top    top/bottom/double
+  ;; :dispenser.facing-toward  facing-toward/facing-away/facing-up/facing-down/facing-left/facing-right
+  (let [[material1 & attrs] (-> material0 name (string/split #"\."))]
+    [(keyword material1) (apply hash-set (map keyword attrs))]))
+
+(comment
+  (parse-material :smooth-stone-slab)
+  (parse-material :smooth-stone-slab.top.facing-toward)
+  )
 
 (defn ->material [thing]
   (cond

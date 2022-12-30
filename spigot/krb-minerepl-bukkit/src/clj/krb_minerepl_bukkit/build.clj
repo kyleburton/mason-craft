@@ -508,12 +508,73 @@
   (automata state args)
   state)
 
+(defn attr-relative-to-absolute [loc attr]
+  (def loc loc)
+  (def attr attr)
+  (let [direction (core/->direction loc)]
+    (def direction direction)
+    (cond
+      (and (= :north direction) (= :facing-away attr))    attr
+      (and (= :north direction) (= :facing-toward attr))  :south
+      (and (= :north direction) (= :facing-left attr))    :west
+      (and (= :north direction) (= :facing-right attr))   :east
+
+      (and (= :south direction) (= :facing-away attr))    attr
+      (and (= :south direction) (= :facing-toward attr))  :north
+      (and (= :south direction) (= :facing-left attr))    :east
+      (and (= :south direction) (= :facing-right attr))   :west
+
+      (and (= :east direction) (= :facing-away attr))     attr
+      (and (= :east direction) (= :facing-toward attr))   :west
+      (and (= :east direction) (= :facing-left attr))     :north
+      (and (= :east direction) (= :facing-right attr))    :south
+
+      (and (= :west direction) (= :facing-away attr))     attr
+      (and (= :west direction) (= :facing-toward attr))   :east
+      (and (= :west direction) (= :facing-left attr))     :south
+      (and (= :west direction) (= :facing-right attr))    :north
+
+      :else
+      attr)))
+
 (defn automata:place [state material0 & [default-material]]
-  (let [block    (.getBlockAt (:world state) (:loc state))
-        material (or material0 default-material :smooth-stone)]
-    (log/infof "automata:place: placing %s at %s (material0=%s; default-material=%s)" material (:loc state) material0 default-material)
-    (.setType block (core/->material material)))
+  (let [block             (.getBlockAt (:world state) (:loc state))
+        [material1 attrs] (core/parse-material (or material0 default-material :smooth-stone))]
+    (log/infof "automata:place: placing %s at %s (material1=%s; default-material=%s)" material1 (:loc state) material0 default-material)
+    (.setType block (core/->material material1))
+    (when-not (empty? attrs)
+      (doseq [attr (map #(attr-relative-to-absolute (:loc state) %) attrs)]
+        (core/apply-block-attr block attr))))
   state)
+
+(comment
+  (def block1 (.getBlock (.getLocation (.getTargetBlockExact (core/->player "DominusSermonis") 9999))))
+  block1
+  (.getData block1)
+  (class (.getType block1))
+  org.bukkit.Material
+
+  (.getFacing (.getBlockData block1))
+  ;; org.bukkit.block.BlockFace
+  (.getType (.getBlockData block1))
+
+  org.bukkit.block.data.type.Slab$Type/TOP
+
+  (.setType
+   (.getBlockData block1)
+   org.bukkit.block.data.type.Slab$Type/BOTTOM)
+
+  (core/schedule!
+   (let [block-data (.getBlockData block1)]
+     (.setType block-data org.bukkit.block.data.type.Slab$Type/TOP)
+     (.setBlockData block1 block-data)))
+
+
+  ;; https://www.spigotmc.org/threads/get-if-slab-is-positioned-bottom-or-top.451406/
+  (.isTagged org.bukkit.Tag/SLABS (.getType block1))
+
+
+  )
 
 (defn automata:clear [state]
   (let [block (.getBlockAt (:world state) (:loc state))]
@@ -559,6 +620,18 @@
 (defn automata:set-var [state vname value & args]
   (assoc-in state [:vars vname] value))
 
+(defn automata:push-loc [state & args]
+  (update-in state [:loc-stack] conj (:loc state)))
+
+(defn automata:peek-loc [state & args]
+  (assoc state
+         :loc       (or (-> state :loc-stack first) (:loc state))))
+
+(defn automata:pop-loc [state & args]
+  (assoc state
+         :loc       (or (-> state :loc-stack first) (:loc state))
+         :loc-stack (-> state :loc-stack rest)))
+
 (def automata-functions
   {:forward    #'automata:forward
    :backward   #'automata:backward
@@ -566,11 +639,6 @@
    :branch     #'automata:branch
    :place      #'automata:place
    :clear      #'automata:clear
-   ;; TODO: do we want the cardinal directions?
-   ;; :north  #'automata:north
-   ;; :east   #'automata:east
-   ;; :south  #'automata:south
-   ;; :west   #'automata:west
    :up-one     #'automata:up-one
    :down-one   #'automata:down-one
    :turn-left  #'automata:turn-left
@@ -579,7 +647,10 @@
    :right      #'automata:right
    :define     #'automata:define-pattern
    :pattern    #'automata:apply-pattern
-   :set        #'automata:set-var})
+   :set        #'automata:set-var
+   :push-loc   #'automata:push-loc
+   :pop-loc    #'automata:pop-loc
+   :peek-loc   #'automata:peek-loc})
 
 (defn automata-compound? [action]
   (and (vector? action)
@@ -653,15 +724,23 @@
           (filter #(not (core/=material? % :air))))
          (inc ii))))))
 
+(defn clear-structure-at-crosshirs!
+  ([player]
+   (clear-structure-at-crosshirs player 1024 9999))
+  ([player max-size]
+   (clear-structure-at-crosshirs player max-size 9999))
+  ([player max-size max-dist]
+   (core/schedule!
+    (clear-contiguous-blocks
+     (.getLocation (.getTargetBlockExact (core/->player player) max-dist))
+     max-size))))
+
 (comment
   (core/schedule!
    (.teleport (core/get-player-named "DominusSermonis")
               (core/->loc [199 -59 1319 10.049989 -178.95055])))
 
-  (core/schedule!
-   (clear-contiguous-blocks
-    (.getLocation (.getTargetBlockExact (core/get-player-named "DominusSermonis") 9999))
-    1024))
+  (clear-structure-at-crosshirs "DominusSermonis" 1024 9999)
 
   (core/schedule!
    (automata
@@ -673,7 +752,7 @@
      :patterns {}
      :vars     {}}
     ;; instructions
-    [;; ...
+    [ ;; ...
      ;; - side wall 3 high
      ;; - spawn platform / channel, 7 then 8, 2 wide
      ;; - side wall 3 high
@@ -710,7 +789,92 @@
      [:repeat 4
       [:branch
        [:pattern :spawn-floor-line]]
+      :left]]))
+
+
+  (core/schedule!
+   (automata
+    ;; (-> "DominusSermonis" core/->loc core/location-to-xyzpy)[199 -59 1319 10.049989 -178.95055]
+    ;; state
+    ;; (.getDirection (core/->loc [199 -59 1319 10.049989 -178.95055]))
+    {:world    (core/overworld)
+     :loc      (core/->loc [199 -59 1319 10.049989 -178.95055])
+     :patterns {}
+     :vars     {}}
+    ;; instructions
+    [ ;; start position
+     :forward
+     :forward
+     [:repeat 8 :up-one]
+     :push-loc
+
+     [:define :wall
+      [:branch
+       [:repeat 3
+        [:branch
+         [:repeat 7
+          [:place :smooth-stone]
+          :forward]
+         :up-one
+         [:repeat 8
+          [:place :smooth-stone]
+          :forward]]
+        :up-one]
+       [:branch
+        [:repeat 5
+         [:place :smooth-stone-slab]
+         :forward]
+        [:place :smooth-stone]
+        :forward
+        [:place :smooth-stone]
+        :up-one
+        [:repeat 9
+         [:place :smooth-stone-slab]
+         :forward]]]]
+
+     ;; left-wall
+     [:pattern :wall]
+
+     ;; floor
+     [:repeat 2
+      :left
+      [:branch
+       [:repeat 7
+        [:place :smooth-stone]
+        :forward]
+       :up-one
+       :backward
+       [:place :smooth-stone-slab]
+       :forward
+       [:repeat 10
+        [:place :smooth-stone]
+        :forward]
+       :backward
+       :backward
+       :up-one
+       [:place :dispenser.facing-toward]]]
+
+     ;; ceiling
+     :peek-loc
+     :left
+     [:repeat 3 :up-one]
+     [:repeat 2
+      [:branch
+       [:repeat 5 [:place :smooth-stone-slab] :forward]
+       [:place :smooth-stone-slab.top]
+       :forward
+       :up-one
+       [:repeat 9 [:place :smooth-stone-slab] :forward]]
       :left]
-     ]))
+     ;; left-wall
+     :peek-loc
+     :left
+     :left
+     :left
+     [:pattern :wall]]))
+
+  (do
+    (core/set-world-time! :morning)
+    (clear-structure-at-crosshirs "DominusSermonis" 1024 9999))
 
   )
