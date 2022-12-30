@@ -663,6 +663,11 @@
   (.name (first (vec (.getEnumConstants org.bukkit.Material))))
   )
 
+(comment
+  (->> materials keys (filter keyword?))
+  (:smooth-stone-slab materials)
+  )
+
 (def materials
   (reduce
    (fn [acc material]

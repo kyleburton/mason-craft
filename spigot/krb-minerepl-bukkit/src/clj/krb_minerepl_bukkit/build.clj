@@ -508,8 +508,10 @@
   (automata state args)
   state)
 
-(defn automata:place [state material]
-  (let [block (.getBlockAt (:world state) (:loc state))]
+(defn automata:place [state material0 & [default-material]]
+  (let [block    (.getBlockAt (:world state) (:loc state))
+        material (or material0 default-material :smooth-stone)]
+    (log/infof "automata:place: placing %s at %s (material0=%s; default-material=%s)" material (:loc state) material0 default-material)
     (.setType block (core/->material material)))
   state)
 
@@ -554,6 +556,9 @@
     (-> state :patterns (get pattern)))
    :pattern))
 
+(defn automata:set-var [state vname value & args]
+  (assoc-in state [:vars vname] value))
+
 (def automata-functions
   {:forward    #'automata:forward
    :backward   #'automata:backward
@@ -573,7 +578,8 @@
    :turn-right #'automata:turn-right
    :right      #'automata:right
    :define     #'automata:define-pattern
-   :pattern    #'automata:apply-pattern})
+   :pattern    #'automata:apply-pattern
+   :set        #'automata:set-var})
 
 (defn automata-compound? [action]
   (and (vector? action)
@@ -595,6 +601,16 @@
     :else
     (throw (RuntimeException. (format "automata-lookup-fn: unrecognized action=%s" action)))))
 
+(defn automata-resolve-vars [state form]
+  (cond
+    (and
+     (vector? form)
+     (-> form first (= :get)))
+    (-> state :vars (get (second form)))
+
+    :else
+    form))
+
 (defn automata [state actions]
   (def state state)
   (def actions actions)
@@ -612,7 +628,7 @@
         (log/infof "automata: action=%s; loc=%s" action (:loc state))
         (when-not action-fn
           (throw (RuntimeException. (format "automata: error: unrecognized action=%s" action))))
-        (recur actions (apply action-fn state args))))))
+        (recur actions (apply action-fn state (map #(automata-resolve-vars state %) args)))))))
 
 (defn clear-contiguous-blocks [loc limit]
   (loop [locs (->> (core/adjacent-locations loc)
@@ -654,12 +670,10 @@
     ;; (.getDirection (core/->loc [199 -59 1319 10.049989 -178.95055]))
     {:world    (core/overworld)
      :loc      (core/->loc [199 -59 1319 10.049989 -178.95055])
-     :patterns {}}
+     :patterns {}
+     :vars     {}}
     ;; instructions
-    [:forward
-     :forward
-     [:repeat 8 :up-one]
-     ;; ...
+    [;; ...
      ;; - side wall 3 high
      ;; - spawn platform / channel, 7 then 8, 2 wide
      ;; - side wall 3 high
@@ -669,25 +683,34 @@
        [:branch
         [:pattern :spawn-floor-line]]
        :up-one]
-      [:set :material :smooth-stone-slab]]
+      [:set :material :smooth-stone-slab]
+      [:branch
+       ;; NB: for the "roof"
+       [:pattern :spawn-floor-line]]]
      [:define
       :spawn-floor-line
       [:repeat 3
        [:branch
         [:repeat 7
-         [:place :smooth-stone]
+         [:place [:get :material] :smooth-stone]
          :forward]
         :backward
         :up-one
         [:repeat 10
-         [:place :smooth-stone]
+         [:place [:get :material] :smooth-stone]
          :forward]]]]
+
+     :forward
+     :forward
+     [:repeat 8 :up-one]
+
      ;; start
      [:branch
       [:pattern :spawn-floor-wall]]
      [:repeat 4
       [:branch
        [:pattern :spawn-floor-line]]
-      :left]]))
+      :left]
+     ]))
 
   )
