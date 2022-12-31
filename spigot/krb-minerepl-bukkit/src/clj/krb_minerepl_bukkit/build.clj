@@ -855,17 +855,23 @@
         :backward
         [:place :smooth-stone-slab]
         :forward
-        [:repeat 10
+        [:repeat 9
          [:place :smooth-stone]
          :forward]
-        :backward
-        :backward
+        [:repeat 1
+         :backward]
         :up-one
         [:place :dispenser.facing-toward]
         [:inventory-add-item :water-bucket]
         :up-one
         [:place :smooth-stone]]]]
 
+     ;; TODO: this is one "hallway", repeat it 8x
+     ;; TODO: then flip to mirror it 8x
+     ;; TODO: then stack it 8x high
+     ;; TODO: hook up the redstone to all the levels
+     ;; TODO: new action: [:forward-to :material]
+     ;;       to make it simpler to jump to a given spot (eg: to build the rear platform or add restone)
      ;; start position
      :forward
      :forward
@@ -893,7 +899,9 @@
      :left
      :left
      :left
-     [:pattern :wall]]))
+     [:pattern :wall]
+     ;; TODO: rear platform with redstone components
+     ]))
 
   (do
     (core/set-world-time! :morning)
