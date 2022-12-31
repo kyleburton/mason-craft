@@ -702,6 +702,12 @@
       (= :down attr)
       (.setFacing block-data org.bukkit.block.BlockFace/DOWN)
 
+      (= :open attr)
+      (.setOpen block-data true)
+
+      (= :closed attr)
+      (.setOpen block-data false)
+
       :else
       (throw (RuntimeException. (format "apply-block-attr: unrecognized attr=%s" attr))))
     (.setBlockData block block-data))
@@ -876,15 +882,18 @@
 
   ;; 96483
 
-  (let [wheres-kyle (.getLocation (get-player-named "kyle_burton"))
+  (let [player-name "DominusSermonis"
+        wheres-kyle (->loc player-name)
         near-kyle   (loc+ wheres-kyle [10 10 10])]
     ;; make sure it's not raining
     (after 2000
            (do
+             (when (.hasStorm (overworld))
+               (.setWeatherDuration (overworld) 0))
              (send-em-all-there! near-kyle)
-             (chat-to-player "kyle_burton" "brought 'em all near ya")
+             (chat-to-player player-name "brought 'em all near ya")
              (light-em-up!)
-             (chat-to-player "kyle_burton" "set 'em on fire"))))
+             (chat-to-player player-name "set 'em on fire"))))
 
   (after 2000 (light-em-up!))
 

@@ -756,7 +756,7 @@
    (.teleport (core/get-player-named "DominusSermonis")
               (core/->loc [199 -59 1319 10.049989 -178.95055])))
 
-  (clear-structure-at-crosshirs "DominusSermonis" 1024 9999)
+  (clear-structure-at-crosshirs! "DominusSermonis" 1024 9999)
 
   (core/schedule!
    (automata
@@ -873,9 +873,8 @@
      ;; TODO: new action: [:forward-to :material]
      ;;       to make it simpler to jump to a given spot (eg: to build the rear platform or add restone)
      ;; start position
-     :forward
-     :forward
-     [:repeat 8 :up-one]
+     [:repeat 8 :forward]
+     [:repeat 32 :up-one]
      :push-loc
 
      ;; left-wall
@@ -901,6 +900,21 @@
      :left
      [:pattern :wall]
      ;; TODO: rear platform with redstone components
+
+     ;; place fence-gates, as open
+     :peek-loc
+     [:branch
+      :up-one
+      :left
+      :backward
+      ;; (->> core/materials keys (filter string?) sort (filter #(.contains % "fence")))
+      [:place :acacia-fence-gate.open]
+      :left
+      [:place :acacia-fence-gate.open]
+      :backward
+      [:place :acacia-fence-gate.open]
+      :right
+      [:place :acacia-fence-gate.open]]
      ]))
 
   (do
