@@ -509,33 +509,34 @@
   state)
 
 (defn attr-relative-to-absolute [loc attr]
-  (def loc loc)
-  (def attr attr)
-  (let [direction (core/->direction loc)]
-    (def direction direction)
-    (cond
-      (and (= :north direction) (= :facing-away attr))    attr
-      (and (= :north direction) (= :facing-toward attr))  :south
-      (and (= :north direction) (= :facing-left attr))    :west
-      (and (= :north direction) (= :facing-right attr))   :east
+  ;; (def loc loc)
+  ;; (def attr attr)
+  (let [direction     (core/->direction loc)
+        absolute-attr (cond
+                        (and (= :north direction) (= :facing-away attr))   :north
+                        (and (= :north direction) (= :facing-toward attr)) :south
+                        (and (= :north direction) (= :facing-left attr))   :west
+                        (and (= :north direction) (= :facing-right attr))  :east
 
-      (and (= :south direction) (= :facing-away attr))    attr
-      (and (= :south direction) (= :facing-toward attr))  :north
-      (and (= :south direction) (= :facing-left attr))    :east
-      (and (= :south direction) (= :facing-right attr))   :west
+                        (and (= :south direction) (= :facing-away attr))   :south
+                        (and (= :south direction) (= :facing-toward attr)) :north
+                        (and (= :south direction) (= :facing-left attr))   :east
+                        (and (= :south direction) (= :facing-right attr))  :west
 
-      (and (= :east direction) (= :facing-away attr))     attr
-      (and (= :east direction) (= :facing-toward attr))   :west
-      (and (= :east direction) (= :facing-left attr))     :north
-      (and (= :east direction) (= :facing-right attr))    :south
+                        (and (= :east direction) (= :facing-away attr))   :east
+                        (and (= :east direction) (= :facing-toward attr)) :west
+                        (and (= :east direction) (= :facing-left attr))   :north
+                        (and (= :east direction) (= :facing-right attr))  :south
 
-      (and (= :west direction) (= :facing-away attr))     attr
-      (and (= :west direction) (= :facing-toward attr))   :east
-      (and (= :west direction) (= :facing-left attr))     :south
-      (and (= :west direction) (= :facing-right attr))    :north
+                        (and (= :west direction) (= :facing-away attr))   :west
+                        (and (= :west direction) (= :facing-toward attr)) :east
+                        (and (= :west direction) (= :facing-left attr))   :south
+                        (and (= :west direction) (= :facing-right attr))  :north
 
-      :else
-      attr)))
+                        :else
+                        attr)]
+    ;;(log/infof "attr-relative-to-absolute: direction=%s | %s => %s" direction attr absolute-attr)
+    absolute-attr))
 
 (defn automata:place [state material0 & [default-material]]
   (let [block             (.getBlockAt (:world state) (:loc state))
@@ -647,6 +648,26 @@
         (core/->material material))])))
   state)
 
+(defn automata:forward-to [state material & args]
+  (let [max-steps 1024]
+    (loop [loc   (-> state :loc)
+           steps max-steps]
+      (cond
+        (< steps 1)
+        (throw (RuntimeException. (format "automata:forward-to: exceeded max-steps=%s looking for %s" max-steps material)))
+
+        (core/=material? loc material)
+        (do
+          (log/infof "automata:forward-to: found material=%s; at loc=%s" material loc)
+          (assoc state :loc loc))
+
+        :else
+        (do
+          (log/infof "automata:forward-to: %s is not %s; moving fwd from %s to %s" (core/->material loc) material loc (core/loc-forward loc 1))
+          (recur
+           (core/loc-forward loc 1)
+           (dec steps)))))))
+
 (def automata-functions
   {:forward            #'automata:forward
    :backward           #'automata:backward
@@ -666,7 +687,8 @@
    :push-loc           #'automata:push-loc
    :pop-loc            #'automata:pop-loc
    :peek-loc           #'automata:peek-loc
-   :inventory-add-item #'automata:inventory-add-item})
+   :inventory-add-item #'automata:inventory-add-item
+   :forward-to         #'automata:forward-to})
 
 (defn automata-compound? [action]
   (and (vector? action)
@@ -864,14 +886,17 @@
         [:place :dispenser.facing-toward]
         [:inventory-add-item :water-bucket]
         :up-one
-        [:place :smooth-stone]]]]
+        [:place :smooth-stone]
+        :down-one
+        :forward
+        [:place :glass]
+        :up-one
+        [:place :redstone-wire]]]]
 
      ;; TODO: this is one "hallway", repeat it 8x
      ;; TODO: then flip to mirror it 8x
      ;; TODO: then stack it 8x high
      ;; TODO: hook up the redstone to all the levels
-     ;; TODO: new action: [:forward-to :material]
-     ;;       to make it simpler to jump to a given spot (eg: to build the rear platform or add restone)
      ;; start position
      [:repeat 8 :forward]
      [:repeat 32 :up-one]
@@ -899,15 +924,12 @@
      :left
      :left
      [:pattern :wall]
-     ;; TODO: rear platform with redstone components
-
      ;; place fence-gates, as open
      :peek-loc
      [:branch
       :up-one
       :left
       :backward
-      ;; (->> core/materials keys (filter string?) sort (filter #(.contains % "fence")))
       [:place :acacia-fence-gate.open]
       :left
       [:place :acacia-fence-gate.open]
@@ -915,10 +937,65 @@
       [:place :acacia-fence-gate.open]
       :right
       [:place :acacia-fence-gate.open]]
-     ]))
+     ;; place trap-doors, as open
+     [:branch
+      :left
+      :backward
+      ;; (core/find-material "trap")
+      ;; org.bukkit.material.TrapDoor.setFacingDirection
+      [:place :acacia-trapdoor.open.facing-toward.top]
+      :left
+      [:place :acacia-trapdoor.open.facing-toward.top]]
 
-  (do
-    (core/set-world-time! :morning)
-    (clear-structure-at-crosshirs! "DominusSermonis" 1024 9999))
+     ;; TODO: rear platform with redstone components
+     :peek-loc
+     :forward
+     [:forward-to :air]
+     :up-one
+     [:forward-to :air]
+     [:branch
+      [:repeat 4
+       [:branch
+        [:repeat 4
+         [:place :smooth-stone]
+         :forward]]
+       :left]]]))
+
+  (core/schedule!
+   (core/set-world-time! :morning)
+   #_(clear-structure-at-crosshirs! "DominusSermonis" 1024 9999)
+   (clear-contiguous-blocks
+    (core/->loc [199 -27 1311])
+    1024))
+
+
+  (let [block      (.getTargetBlockExact (core/->player "DominusSermonis") 1024)
+        block-data (.getBlockData block)]
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.NORTH
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SOUTH
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.UP
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.DOWN
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.NORTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.NORTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SOUTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SOUTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.WEST_NORTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.NORTH_NORTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.NORTH_NORTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.EAST_NORTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.EAST_SOUTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SOUTH_SOUTH_EAST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SOUTH_SOUTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.WEST_SOUTH_WEST
+    ;; public static final org.bukkit.block.BlockFace org.bukkit.block.BlockFace.SELF
+    ;; (.setFacing block-data org.bukkit.block.BlockFace/UP) ;; invalid valud
+    (.setFacing block-data org.bukkit.block.BlockFace/SOUTH)
+    (core/schedule!
+     (.setBlockData block block-data))
+    #_(.getState block)
+    block-data
+    #_(.getState block-data))
 
   )

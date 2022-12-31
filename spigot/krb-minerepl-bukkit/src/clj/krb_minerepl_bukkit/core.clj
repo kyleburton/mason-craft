@@ -676,13 +676,35 @@
    (.getEnumConstants org.bukkit.Material)))
 
 (defn apply-block-attr [block attr]
+  (def block block)
+  (def attr attr)
   (let [block-data (.getBlockData block)]
+    (def block-data block-data)
+    ;; net.minecraft.world.level.block.state.properties.BlockPropertySlabType
+    ;; https://bukkit.org/threads/set-block-direction-easy.474786/
+    ;; interfaces: Directional (setFacing), Orientable (setAxis), Rotatable (setRotation)
     (cond
       (= :top attr)
-      (.setType block-data org.bukkit.block.data.type.Slab$Type/TOP)
+      ;;
+      (cond
+        (isa? (class block-data) org.bukkit.block.data.Bisected)
+        (.setHalf block-data org.bukkit.block.data.Bisected$Half/TOP)
+        ;; org.bukkit.block.data.Bisected
+        ;; org.bukkit.block.data.Bisected$Half/TOP
+        ;; org.bukkit.block.data.Bisected$Half/BOTTOM
+
+        ;; TODO: Slab$Type/TOP should only be used for slabs
+        :else
+        (.setType block-data org.bukkit.block.data.type.Slab$Type/TOP))
 
       (= :bottom attr)
-      (.setType block-data org.bukkit.block.data.type.Slab$Type/BOTTOM)
+      (cond
+        (isa? (class block-data) org.bukkit.block.data.Bisected)
+        (.setHalf block-data org.bukkit.block.data.Bisected$Half/BOTTOM)
+
+        ;; TODO: Slab$Type/TOP should only be used for slabs
+        :else
+        (.setType block-data org.bukkit.block.data.type.Slab$Type/BOTTOM))
 
       (= :north attr)
       (.setFacing block-data org.bukkit.block.BlockFace/NORTH)
@@ -712,6 +734,9 @@
       (throw (RuntimeException. (format "apply-block-attr: unrecognized attr=%s" attr))))
     (.setBlockData block block-data))
   block)
+
+(defn find-material [substr]
+  (->> materials keys (filter string?) sort (filter #(.contains % substr))))
 
 (defn parse-material [material0]
   ;; TODO: if thing is a keyword it may contain modifiers
