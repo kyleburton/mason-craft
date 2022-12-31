@@ -632,25 +632,41 @@
          :loc       (or (-> state :loc-stack first) (:loc state))
          :loc-stack (-> state :loc-stack rest)))
 
+(defn automata:inventory-add-item [state material & args]
+  (let [block       (.getBlockAt (:world state) (:loc state))
+        block-state (.getState block)
+        inventory   (.getInventory block-state)]
+    (def block block)
+    (def block-state block-state)
+    (def inventory inventory)
+    (.addItem
+     inventory
+     (into-array
+      org.bukkit.inventory.ItemStack
+      [(org.bukkit.inventory.ItemStack.
+        (core/->material material))])))
+  state)
+
 (def automata-functions
-  {:forward    #'automata:forward
-   :backward   #'automata:backward
-   :repeat     #'automata:repeat
-   :branch     #'automata:branch
-   :place      #'automata:place
-   :clear      #'automata:clear
-   :up-one     #'automata:up-one
-   :down-one   #'automata:down-one
-   :turn-left  #'automata:turn-left
-   :left       #'automata:left
-   :turn-right #'automata:turn-right
-   :right      #'automata:right
-   :define     #'automata:define-pattern
-   :pattern    #'automata:apply-pattern
-   :set        #'automata:set-var
-   :push-loc   #'automata:push-loc
-   :pop-loc    #'automata:pop-loc
-   :peek-loc   #'automata:peek-loc})
+  {:forward            #'automata:forward
+   :backward           #'automata:backward
+   :repeat             #'automata:repeat
+   :branch             #'automata:branch
+   :place              #'automata:place
+   :clear              #'automata:clear
+   :up-one             #'automata:up-one
+   :down-one           #'automata:down-one
+   :turn-left          #'automata:turn-left
+   :left               #'automata:left
+   :turn-right         #'automata:turn-right
+   :right              #'automata:right
+   :define             #'automata:define-pattern
+   :pattern            #'automata:apply-pattern
+   :set                #'automata:set-var
+   :push-loc           #'automata:push-loc
+   :pop-loc            #'automata:pop-loc
+   :peek-loc           #'automata:peek-loc
+   :inventory-add-item #'automata:inventory-add-item})
 
 (defn automata-compound? [action]
   (and (vector? action)
@@ -726,9 +742,9 @@
 
 (defn clear-structure-at-crosshirs!
   ([player]
-   (clear-structure-at-crosshirs player 1024 9999))
+   (clear-structure-at-crosshirs! player 1024 9999))
   ([player max-size]
-   (clear-structure-at-crosshirs player max-size 9999))
+   (clear-structure-at-crosshirs! player max-size 9999))
   ([player max-size max-dist]
    (core/schedule!
     (clear-contiguous-blocks
@@ -802,12 +818,7 @@
      :patterns {}
      :vars     {}}
     ;; instructions
-    [ ;; start position
-     :forward
-     :forward
-     [:repeat 8 :up-one]
-     :push-loc
-
+    [
      [:define :wall
       [:branch
        [:repeat 3
@@ -832,27 +843,38 @@
          [:place :smooth-stone-slab]
          :forward]]]]
 
+     ;; floor
+     [:define :floor
+      [:repeat 2
+       :left
+       [:branch
+        [:repeat 7
+         [:place :smooth-stone]
+         :forward]
+        :up-one
+        :backward
+        [:place :smooth-stone-slab]
+        :forward
+        [:repeat 10
+         [:place :smooth-stone]
+         :forward]
+        :backward
+        :backward
+        :up-one
+        [:place :dispenser.facing-toward]
+        [:inventory-add-item :water-bucket]
+        :up-one
+        [:place :smooth-stone]]]]
+
+     ;; start position
+     :forward
+     :forward
+     [:repeat 8 :up-one]
+     :push-loc
+
      ;; left-wall
      [:pattern :wall]
-
-     ;; floor
-     [:repeat 2
-      :left
-      [:branch
-       [:repeat 7
-        [:place :smooth-stone]
-        :forward]
-       :up-one
-       :backward
-       [:place :smooth-stone-slab]
-       :forward
-       [:repeat 10
-        [:place :smooth-stone]
-        :forward]
-       :backward
-       :backward
-       :up-one
-       [:place :dispenser.facing-toward]]]
+     [:pattern :floor]
 
      ;; ceiling
      :peek-loc
@@ -875,6 +897,6 @@
 
   (do
     (core/set-world-time! :morning)
-    (clear-structure-at-crosshirs "DominusSermonis" 1024 9999))
+    (clear-structure-at-crosshirs! "DominusSermonis" 1024 9999))
 
   )
